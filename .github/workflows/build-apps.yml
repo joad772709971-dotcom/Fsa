@@ -1,0 +1,198 @@
+name: بناء نظام الرقم الأول - Android APK & Windows EXE
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ==========================================
+  # 1. Build Android APK
+  # ==========================================
+  build-android-apk:
+    name: 📱 بناء تطبيق الأندرويد (الرقم الأول APK)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Android SDK Environment
+        run: |
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          yes | sdkmanager --licenses || true
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Setup App Icons & Assets
+        run: node scripts/setup-icons.cjs || true
+
+      - name: Build Web Assets for Android
+        run: npm run build
+
+      - name: Clean Maps from Dist
+        run: rm -f dist/*.map dist/**/*.map || true
+
+      - name: Configure Android App Icon & Strings
+        run: node scripts/setup-icons.cjs || true
+
+      - name: Sync Capacitor Android
+        run: npx cap sync android
+
+      - name: Build Android Debug APK with Gradle
+        run: |
+          cd android
+          chmod +x gradlew
+          export GRADLE_OPTS="-Dorg.gradle.internal.http.connectionTimeout=120000 -Dorg.gradle.internal.http.socketTimeout=120000 -Dorg.gradle.jvmargs=-Xmx3072m"
+          for i in 1 2 3; do
+            echo "Attempt $i: running assembleDebug..."
+            ./gradlew assembleDebug --no-daemon --stacktrace && break || (echo "Gradle failed, retrying in 10s..." && sleep 10)
+          done
+
+      - name: Prepare Single APK (Al-Raqam-Al-Awwal.apk)
+        run: |
+          FOUND_APK=$(find android/app/build/outputs/apk -name "*.apk" | head -n 1)
+          if [ -z "$FOUND_APK" ]; then
+            echo "Error: No APK file generated!"
+            exit 1
+          fi
+          cp "$FOUND_APK" ./Al-Raqam-Al-Awwal.apk
+          ls -lh ./Al-Raqam-Al-Awwal.apk
+
+      - name: Upload APK directly to GitHub Release (Releases)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.7.7
+          name: "إصدار نظام الرقم الأول v2.7.7"
+          body: |
+            # 🚀 نظام الرقم الأول لإدارة نقاط البيع والمحاسبة (v2.7.7)
+
+            التطبيقات المكتملة والمتاحة للتحميل الفوري:
+            - 📱 **Al-Raqam-Al-Awwal.apk**: تطبيق الأندرويد للهواتف والشاشات اللمسية ونقاط البيع.
+            - 💻 **Al-Raqam-Al-Awwal.exe**: البرنامج المكتبي لأجهزة الكمبيوتر (الويندوز).
+            - 📦 **Al-Raqam-Al-Awwal-Windows.zip**: الحزمة المضغوطة لويندوز.
+          files: ./Al-Raqam-Al-Awwal.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Display Download Links in Job Summary
+        run: |
+          echo "## 📱 اكتمل بناء تطبيق الأندرويد بنجاح!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📥 روابط التنزيل المباشرة:" >> $GITHUB_STEP_SUMMARY
+          echo "- 📱 [تحميل تطبيق الأندرويد (Al-Raqam-Al-Awwal.apk)](https://github.com/${{ github.repository }}/releases/download/v2.7.7/Al-Raqam-Al-Awwal.apk)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🌐 [صفحة جميع الإصدارات (Releases)](https://github.com/${{ github.repository }}/releases/tag/v2.7.7)" >> $GITHUB_STEP_SUMMARY
+
+  # ==========================================
+  # 2. Build Windows EXE
+  # ==========================================
+  build-windows-exe:
+    name: 💻 بناء برنامج الويندوز (الرقم الأول EXE)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          rm -f package-lock.json
+          npm install --legacy-peer-deps
+          npm install -D @tailwindcss/oxide-win32-x64-msvc@^4.1.14 lightningcss-win32-x64-msvc@^1.29.1 @rollup/rollup-win32-x64-msvc@^4.63.1 --legacy-peer-deps
+          npm install --save-dev electron-builder@24.13.3 --legacy-peer-deps
+
+      - name: Ensure Windows Multi-Resolution Icon
+        run: node scripts/setup-icons.cjs || true
+
+      - name: Build Web Application
+        run: npx vite build
+
+      - name: Clean Maps from Dist
+        shell: bash
+        run: |
+          rm -f dist/*.map dist/**/*.map || true
+
+      - name: Build Windows Installer (.exe)
+        shell: bash
+        run: |
+          npx electron-builder --win nsis zip --x64 --publish never --config.directories.output=dist_electron --config.nsis.oneClick=false --config.nsis.allowToChangeInstallationDirectory=true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare Windows Files (Full EXE & ZIP Package)
+        shell: bash
+        run: |
+          echo "=== All files generated in dist_electron ==="
+          ls -lh dist_electron/
+
+          EXE_PATH=$(find dist_electron -maxdepth 1 -type f -name "*.exe" | head -n 1)
+          if [ -z "$EXE_PATH" ]; then
+            EXE_PATH=$(find dist_electron -type f -name "*.exe" -size +30M | head -n 1)
+          fi
+
+          if [ -n "$EXE_PATH" ]; then
+            cp "$EXE_PATH" ./Al-Raqam-Al-Awwal.exe
+            echo "Copied Installer: $EXE_PATH -> ./Al-Raqam-Al-Awwal.exe"
+            ls -lh ./Al-Raqam-Al-Awwal.exe
+          else
+            echo "Error: No suitable .exe found in dist_electron!"
+            exit 1
+          fi
+
+          ZIP_PATH=$(find dist_electron -maxdepth 1 -type f -name "*.zip" | head -n 1)
+          if [ -n "$ZIP_PATH" ]; then
+            cp "$ZIP_PATH" ./Al-Raqam-Al-Awwal-Windows.zip
+            echo "Found ZIP package: $ZIP_PATH -> ./Al-Raqam-Al-Awwal-Windows.zip"
+            ls -lh ./Al-Raqam-Al-Awwal-Windows.zip
+          elif [ -d "dist_electron/win-unpacked" ]; then
+            powershell -command "Compress-Archive -Path dist_electron/win-unpacked/* -DestinationPath ./Al-Raqam-Al-Awwal-Windows.zip -Force"
+            ls -lh ./Al-Raqam-Al-Awwal-Windows.zip
+          fi
+
+      - name: Upload Windows EXE & ZIP directly to GitHub Release (Releases)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.7.7
+          name: "إصدار نظام الرقم الأول v2.7.7"
+          body: |
+            # 🚀 نظام الرقم الأول لإدارة نقاط البيع والمحاسبة (v2.7.7)
+
+            التطبيقات المكتملة والمتاحة للتحميل الفوري:
+            - 📱 **Al-Raqam-Al-Awwal.apk**: تطبيق الأندرويد للهواتف والشاشات اللمسية ونقاط البيع.
+            - 💻 **Al-Raqam-Al-Awwal.exe**: البرنامج المكتبي لأجهزة الكمبيوتر (الويندوز).
+            - 📦 **Al-Raqam-Al-Awwal-Windows.zip**: الحزمة المضغوطة لويندوز.
+          files: |
+            ./Al-Raqam-Al-Awwal.exe
+            ./Al-Raqam-Al-Awwal-Windows.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Display Download Links in Job Summary
+        shell: bash
+        run: |
+          echo "## 💻 اكتمل بناء برنامج وحزمة الويندوز بنجاح!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📥 روابط التنزيل المباشرة:" >> $GITHUB_STEP_SUMMARY
+          echo "- 💻 [تحميل برنامج الويندوز (Al-Raqam-Al-Awwal.exe)](https://github.com/${{ github.repository }}/releases/download/v2.7.7/Al-Raqam-Al-Awwal.exe)" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 [تحميل حزمة الويندوز المضغوطة (Al-Raqam-Al-Awwal-Windows.zip)](https://github.com/${{ github.repository }}/releases/download/v2.7.7/Al-Raqam-Al-Awwal-Windows.zip)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🌐 [صفحة جميع الإصدارات (Releases)](https://github.com/${{ github.repository }}/releases/tag/v2.7.7)" >> $GITHUB_STEP_SUMMARY

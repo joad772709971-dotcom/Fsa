@@ -1,0 +1,12 @@
+node_modules/
+build/
+dist/
+dist_electron/
+android/app/build/
+.gradle/
+coverage/
+.DS_Store
+*.log
+*.timestamp*
+.env*
+!.env.example

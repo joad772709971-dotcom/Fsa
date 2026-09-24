@@ -1,0 +1,159 @@
+{
+  "entities": {
+    "transactions": {
+      "title": "Transactions",
+      "description": "Financial and shop transactions including sales, maintenance, purchases, and debts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "type": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "cost": { "type": "number" },
+        "profit": { "type": "number" },
+        "notes": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "supplierName": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "date", "type", "category", "description", "price"]
+    },
+    "suppliers": {
+      "title": "Suppliers",
+      "description": "Wholesalers and suppliers debt accounts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "balance": { "type": "number" },
+        "phone": { "type": "string" },
+        "notes": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "customers": {
+      "title": "Customers",
+      "description": "Customer debts and receivables",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "balance": { "type": "number" },
+        "phone": { "type": "string" },
+        "notes": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "employees": {
+      "title": "Employees",
+      "description": "Staff and technicians",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "balance": { "type": "number" },
+        "phone": { "type": "string" },
+        "percentage": { "type": "number" },
+        "notes": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "inventory": {
+      "title": "Inventory Items",
+      "description": "Current shop inventory stock",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "quantity": { "type": "number" },
+        "cost": { "type": "number" },
+        "price": { "type": "number" },
+        "minQuantity": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "quantity", "cost", "price"]
+    },
+    "price_memory": {
+      "title": "Price Memory Items",
+      "description": "Approved and learned damar/cost pricing memory",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "cost": { "type": "number" },
+        "defaultSellPrice": { "type": "number" },
+        "expectedProfit": { "type": "number" },
+        "category": { "type": "string" },
+        "defaultSupplier": { "type": "string" },
+        "notes": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "cost", "defaultSellPrice"]
+    },
+    "sync_metadata": {
+      "title": "Sync Metadata",
+      "description": "Tracks last sync timestamps and device information",
+      "type": "object",
+      "properties": {
+        "lastSyncedAt": { "type": "string" },
+        "deviceId": { "type": "string" }
+      }
+    },
+    "store_state": {
+      "title": "Store State Backup",
+      "description": "Consolidated store state snapshots for offline-first sync",
+      "type": "object",
+      "properties": {
+        "updatedAt": { "type": "number" },
+        "deviceId": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/transactions/{transactionId}": {
+      "schema": "transactions",
+      "description": "Collection of transactions"
+    },
+    "/suppliers/{supplierId}": {
+      "schema": "suppliers",
+      "description": "Collection of suppliers"
+    },
+    "/customers/{customerId}": {
+      "schema": "customers",
+      "description": "Collection of customer debts"
+    },
+    "/employees/{employeeId}": {
+      "schema": "employees",
+      "description": "Collection of employees"
+    },
+    "/inventory/{itemId}": {
+      "schema": "inventory",
+      "description": "Collection of inventory stock items"
+    },
+    "/price_memory/{memoryId}": {
+      "schema": "price_memory",
+      "description": "Collection of price memory and damar catalogue"
+    },
+    "/store_state/{stateDocId}": {
+      "schema": "store_state",
+      "description": "Snapshot of store state"
+    },
+    "/sync_metadata/{metaId}": {
+      "schema": "sync_metadata",
+      "description": "Metadata for synchronization tracking"
+    }
+  }
+}

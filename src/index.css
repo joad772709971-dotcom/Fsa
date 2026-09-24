@@ -1,0 +1,182 @@
+@import "tailwindcss";
+
+:root {
+  --app-font-scale: 1;
+}
+
+/* Pure Font Scaling: scales all rem and em typography without shrinking layout or viewport */
+html {
+  font-size: calc(16px * var(--app-font-scale, 1)) !important;
+  width: 100% !important;
+  max-width: 100vw !important;
+}
+
+/* Proportionally scale arbitrary pixel classes used throughout the app */
+[class*="text-[8px]"] { font-size: calc(8px * var(--app-font-scale, 1)) !important; }
+[class*="text-[9px]"] { font-size: calc(9px * var(--app-font-scale, 1)) !important; }
+[class*="text-[10px]"] { font-size: calc(10px * var(--app-font-scale, 1)) !important; }
+[class*="text-[11px]"] { font-size: calc(11px * var(--app-font-scale, 1)) !important; }
+[class*="text-[12px]"] { font-size: calc(12px * var(--app-font-scale, 1)) !important; }
+[class*="text-[13px]"] { font-size: calc(13px * var(--app-font-scale, 1)) !important; }
+[class*="text-[14px]"] { font-size: calc(14px * var(--app-font-scale, 1)) !important; }
+[class*="text-[15px]"] { font-size: calc(15px * var(--app-font-scale, 1)) !important; }
+[class*="text-[16px]"] { font-size: calc(16px * var(--app-font-scale, 1)) !important; }
+[class*="text-[18px]"] { font-size: calc(18px * var(--app-font-scale, 1)) !important; }
+[class*="text-[20px]"] { font-size: calc(20px * var(--app-font-scale, 1)) !important; }
+[class*="text-[22px]"] { font-size: calc(22px * var(--app-font-scale, 1)) !important; }
+[class*="text-[24px]"] { font-size: calc(24px * var(--app-font-scale, 1)) !important; }
+[class*="text-[28px]"] { font-size: calc(28px * var(--app-font-scale, 1)) !important; }
+
+@layer base {
+  html, body {
+    font-family: 'Cairo', 'Tajawal', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+    touch-action: pan-y;
+  }
+
+  /* Guarantee all input fields, textareas, and buttons across desktop, laptop exe, and mobile are interactive */
+  input, textarea, select {
+    -webkit-user-select: text !important;
+    user-select: text !important;
+    pointer-events: auto !important;
+  }
+
+  button, [role="button"] {
+    cursor: pointer !important;
+    pointer-events: auto !important;
+  }
+  
+  .font-mono-numbers {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+  }
+}
+
+/* Ensure all tables scroll internally without pushing parent container */
+.table-responsive-container {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+@media print {
+  /* 1. Strict concealment of application chrome, navigation, toolbars, and action controls */
+  .no-print,
+  .no-print *,
+  header,
+  nav,
+  aside,
+  button,
+  input,
+  select,
+  textarea,
+  [role="button"],
+  .print-toolbar,
+  .fixed,
+  [role="dialog"],
+  .action-buttons,
+  .action-column,
+  .actions-cell,
+  [title*="تعديل"],
+  [title*="حذف"],
+  [title*="إضافة"],
+  [title*="حفظ"],
+  [title*="إلغاء"],
+  [aria-label*="تعديل"],
+  [aria-label*="حذف"],
+  [aria-label*="إضافة"] {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* 2. Page and body layout rules */
+  html, body {
+    visibility: visible !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    font-size: 11pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* When #printableArea is populated by PrintModal/printHelper, display it exclusively */
+  body.has-printable-content > *:not(#printableArea) {
+    display: none !important;
+  }
+
+  #printableArea,
+  #print-content-root {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Ensure buttons and action items inside #printableArea remain strictly hidden */
+  #printableArea button,
+  #printableArea .no-print,
+  #printableArea [role="button"],
+  #print-content-root button,
+  #print-content-root .no-print,
+  #print-content-root [role="button"] {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* 3. Table formatting for paper print */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  /* 4. Page layout rules */
+  @page {
+    margin: 8mm;
+    size: auto;
+  }
+
+  .print-break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-only {
+    display: block !important;
+    visibility: visible !important;
+  }
+}
