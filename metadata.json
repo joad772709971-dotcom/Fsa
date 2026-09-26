@@ -1,0 +1,11 @@
+{
+  "name": "Remix محل مصعب رقم 2",
+  "description": "نظام الرقم الأول المحاسبي والإداري المتكامل لإدارة المبيعات والصيانة وشبكات الرصيد وتصفية الأرباح اليومية وكشوفات الحساب",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

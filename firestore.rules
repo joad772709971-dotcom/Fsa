@@ -1,0 +1,59 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // POS Store Real-time Synchronization rules
+    match /transactions/{transactionId} {
+      allow read, write: if true;
+    }
+
+    match /suppliers/{supplierId} {
+      allow read, write: if true;
+    }
+
+    match /customers/{customerId} {
+      allow read, write: if true;
+    }
+
+    match /employees/{employeeId} {
+      allow read, write: if true;
+    }
+
+    match /inventory/{itemId} {
+      allow read, write: if true;
+    }
+
+    match /price_memory/{memoryId} {
+      allow read, write: if true;
+    }
+
+    match /days/{dayId} {
+      allow read, write: if true;
+    }
+
+    match /maintenance_devices/{deviceId} {
+      allow read, write: if true;
+    }
+
+    match /sim_records/{simId} {
+      allow read, write: if true;
+    }
+
+    match /delivery_orders/{orderId} {
+      allow read, write: if true;
+    }
+
+    match /store_state/{stateDocId} {
+      allow read, write: if true;
+    }
+
+    match /sync_metadata/{metaId} {
+      allow read, write: if true;
+    }
+
+    // Fallback for subcollections or testing
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

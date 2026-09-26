@@ -1,0 +1,12 @@
+{
+  "appId": "com.alraqamalawwal.app",
+  "appName": "الرقم الأول",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

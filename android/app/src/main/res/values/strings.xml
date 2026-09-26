@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">الرقم الأول</string>
+    <string name="title_activity_main">الرقم الأول</string>
+    <string name="package_name">com.alraqamalawwal.app</string>
+    <string name="custom_url_scheme">com.alraqamalawwal.app</string>
+</resources>
