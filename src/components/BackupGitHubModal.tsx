@@ -57,7 +57,7 @@ export const BackupGitHubModal: React.FC<BackupGitHubModalProps> = ({
   suppliers,
   onRestoreData,
 }) => {
-  const [githubRepoUrl] = useState('https://github.com/mwtrla493-oss/Joad');
+  const [githubRepoUrl] = useState('https://github.com/joad772709971-dotcom/Fsa');
   const [releaseInfo, setReleaseInfo] = useState<ReleaseData | null>(null);
   const [isLoadingRelease, setIsLoadingRelease] = useState(true);
   const [downloadingType, setDownloadingType] = useState<string | null>(null);
@@ -157,7 +157,7 @@ export const BackupGitHubModal: React.FC<BackupGitHubModalProps> = ({
                 تنزيل تطبيقات النظام ومستودع GitHub والنسخ الاحتياطي
               </h2>
               <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs px-2.5 py-0.5 rounded-full font-bold">
-                الإصدار الرسمي v2.7.6 جاهز
+                الإصدار الرسمي v2.7.8 جاهز
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-1">
@@ -168,7 +168,7 @@ export const BackupGitHubModal: React.FC<BackupGitHubModalProps> = ({
 
         <div className="flex items-center gap-2">
           <a
-            href="https://github.com/mwtrla493-oss/Joad/releases"
+            href="https://github.com/joad772709971-dotcom/Fsa/releases"
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-xs"
@@ -177,13 +177,13 @@ export const BackupGitHubModal: React.FC<BackupGitHubModalProps> = ({
             صفحة Releases على GitHub
           </a>
           <a
-            href="https://github.com/mwtrla493-oss/Joad"
+            href="https://github.com/joad772709971-dotcom/Fsa"
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2 rounded-xl border border-slate-700 transition-all"
           >
             <Github className="w-3.5 h-3.5 text-amber-400" />
-            مستودع Gffg
+            مستودع GitHub
           </a>
         </div>
       </div>
@@ -440,7 +440,7 @@ export const BackupGitHubModal: React.FC<BackupGitHubModalProps> = ({
           <p className="text-xs text-slate-600 leading-relaxed">
             مستودع المشروع المربوط على GitHub:
             <br />
-            <strong className="text-indigo-700 font-mono">mwtrla493-oss/Joad</strong>
+            <strong className="text-indigo-700 font-mono">joad772709971-dotcom/Fsa</strong>
           </p>
 
           <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2 text-xs">
@@ -467,7 +467,7 @@ export const BackupGitHubModal: React.FC<BackupGitHubModalProps> = ({
             </ol>
             <div className="pt-1 flex gap-2">
               <a
-                href="https://github.com/mwtrla493-oss/Joad/actions"
+                href="https://github.com/joad772709971-dotcom/Fsa/actions"
                 target="_blank"
                 rel="noreferrer"
                 className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-indigo-200"
@@ -476,7 +476,7 @@ export const BackupGitHubModal: React.FC<BackupGitHubModalProps> = ({
                 فتح GitHub Actions
               </a>
               <a
-                href="https://github.com/mwtrla493-oss/Joad/releases"
+                href="https://github.com/joad772709971-dotcom/Fsa/releases"
                 target="_blank"
                 rel="noreferrer"
                 className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-indigo-200"

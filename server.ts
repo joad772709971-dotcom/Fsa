@@ -1268,14 +1268,21 @@ ${trainedRulesText}
   const GITHUB_REPO = process.env.GITHUB_REPO || 'joad772709971-dotcom/Fsa';
   const GITHUB_TOKEN = process.env.GITHUB_TOKEN || '';
 
+  const getGithubHeaders = (accept = 'application/vnd.github.v3+json'): Record<string, string> => {
+    const headers: Record<string, string> = {
+      'Accept': accept,
+      'User-Agent': 'Al-Raqam-Al-Awwal-App',
+    };
+    if (GITHUB_TOKEN) {
+      headers['Authorization'] = `token ${GITHUB_TOKEN}`;
+    }
+    return headers;
+  };
+
   app.get('/api/app-releases', async (_req, res) => {
     try {
       const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases`, {
-        headers: {
-          'Authorization': `token ${GITHUB_TOKEN}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'Al-Raqam-Al-Awwal-App',
-        },
+        headers: getGithubHeaders(),
       });
       if (!response.ok) {
         throw new Error(`GitHub API returned status ${response.status}`);
@@ -1355,11 +1362,7 @@ ${trainedRulesText}
   app.get('/api/download/zip', async (_req, res) => {
     try {
       const relRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases`, {
-        headers: {
-          'Authorization': `token ${GITHUB_TOKEN}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'Al-Raqam-Al-Awwal-App',
-        },
+        headers: getGithubHeaders(),
       });
       const data: any = await relRes.json();
       let zipAsset: any = null;
@@ -1378,11 +1381,7 @@ ${trainedRulesText}
       }
 
       const assetRes = await fetch(zipAsset.url, {
-        headers: {
-          'Authorization': `token ${GITHUB_TOKEN}`,
-          'Accept': 'application/octet-stream',
-          'User-Agent': 'Al-Raqam-Al-Awwal-App',
-        },
+        headers: getGithubHeaders('application/octet-stream'),
         redirect: 'manual',
       });
 
@@ -1419,11 +1418,7 @@ ${trainedRulesText}
   app.get('/api/download/android', async (_req, res) => {
     try {
       const relRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases`, {
-        headers: {
-          'Authorization': `token ${GITHUB_TOKEN}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'Al-Raqam-Al-Awwal-App',
-        },
+        headers: getGithubHeaders(),
       });
       const data: any = await relRes.json();
       let apkAsset: any = null;
@@ -1442,11 +1437,7 @@ ${trainedRulesText}
       }
 
       const assetRes = await fetch(apkAsset.url, {
-        headers: {
-          'Authorization': `token ${GITHUB_TOKEN}`,
-          'Accept': 'application/octet-stream',
-          'User-Agent': 'Al-Raqam-Al-Awwal-App',
-        },
+        headers: getGithubHeaders('application/octet-stream'),
         redirect: 'manual',
       });
 
@@ -1483,11 +1474,7 @@ ${trainedRulesText}
   app.get('/api/download/windows', async (_req, res) => {
     try {
       const relRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases`, {
-        headers: {
-          'Authorization': `token ${GITHUB_TOKEN}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'Al-Raqam-Al-Awwal-App',
-        },
+        headers: getGithubHeaders(),
       });
       const data: any = await relRes.json();
       let exeAsset: any = null;
@@ -1506,11 +1493,7 @@ ${trainedRulesText}
       }
 
       const assetRes = await fetch(exeAsset.url, {
-        headers: {
-          'Authorization': `token ${GITHUB_TOKEN}`,
-          'Accept': 'application/octet-stream',
-          'User-Agent': 'Al-Raqam-Al-Awwal-App',
-        },
+        headers: getGithubHeaders('application/octet-stream'),
         redirect: 'manual',
       });
 
