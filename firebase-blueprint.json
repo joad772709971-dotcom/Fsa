@@ -154,6 +154,10 @@
     "/sync_metadata/{metaId}": {
       "schema": "sync_metadata",
       "description": "Metadata for synchronization tracking"
+    },
+    "/deleted_transactions/{docId}": {
+      "schema": "sync_metadata",
+      "description": "Tombstones for deleted transactions to sync deletions across devices"
     }
   }
 }

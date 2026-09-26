@@ -177,42 +177,18 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // دمج واسترجاع المبيعات والصيانة من البيانات الأصلية المعتمدة إذا كانت الأيام المحفوظة قد فُرغت سابقاً
-          const initialMap = new Map<string, DayRecord>(INITIAL_DAYS_DATA.map((d) => [d.date, d]));
-          list = parsed.map((d) => {
-            const seed = initialMap.get(d.date);
-            if (!seed) return d;
-            // تنقية سجلات يوم 1 شهر 8 من التكرار القديم
-            if (d.date === '2026-08-01' && ((d.accessories && d.accessories.length > 6) || (d.maintenance && d.maintenance.length > 2))) {
-              return {
-                ...d,
-                accessories: seed.accessories || [],
-                phones: seed.phones || [],
-                maintenance: seed.maintenance || [],
-              };
-            }
-            const hasSales =
-              (d.accessories && d.accessories.length > 0) ||
-              (d.phones && d.phones.length > 0) ||
-              (d.maintenance && d.maintenance.length > 0);
-            if (!hasSales) {
-              return {
-                ...d,
-                accessories: seed.accessories || [],
-                phones: seed.phones || [],
-                maintenance: seed.maintenance || [],
-                recharge:
-                  seed.recharge && seed.recharge.totalWithProfit > 0 ? seed.recharge : d.recharge,
-              };
-            }
-            return d;
-          });
+          list = parsed;
+          const today = getTodayDateString();
+          if (!list.some((d) => d.date === today)) {
+            return [getOrCreateDayForDate(today, list), ...list];
+          }
+          return list;
         }
       }
     } catch (e) {
       console.error(e);
     }
-    // Enforce official verified Hadi accounting update
+    // Enforce official verified Hadi accounting update only on pristine initialization
     list = applyOfficialHadiToDayRecords(list);
 
     const today = getTodayDateString();
@@ -891,10 +867,56 @@ export default function App() {
       autoRegisterSaleInInventory(t);
     });
 
-    // 4. تحديث حالة الذاكرة المحلية
+    // 4. تحديث حالة الذاكرة المحلية للمعاملات
     setTransactions((prev) => {
       const remaining = prev.filter((t) => t.date !== date);
       return [...sanitizedList, ...remaining];
+    });
+
+    // 5. تحديث سجل اليومية (days / DayRecord) فورياً وتزامنه سحابياً
+    setDays((prev) => {
+      const targetDay = getOrCreateDayForDate(date, prev);
+      const accItems: { id: string; name: string; price: number }[] = [];
+      const maintItems: { id: string; deviceOrService: string; price: number; type: string; status: string }[] = [];
+      const phoneItems: { id: string; name: string; sellingPrice: number; costPrice: number; profit: number }[] = [];
+      let rechargeTotal = 0;
+      let rechargeProfit = 0;
+      const expenseList: { id: string; description: string; amount: number }[] = [];
+      const supTransfers: { id: string; supplier: string; amount: number }[] = [];
+
+      sanitizedList.forEach((t, i) => {
+        if (t.category === 'accessories' || (t.type === 'sale' && t.category !== 'phones')) {
+          accItems.push({ id: t.id || `acc_${i}`, name: t.description, price: t.price });
+        } else if (t.category === 'maintenance' || t.type === 'maintenance') {
+          maintItems.push({ id: t.id || `maint_${i}`, deviceOrService: t.description, price: t.price, type: 'شاشات وصيانة', status: 'خالص' });
+        } else if (t.category === 'phones') {
+          phoneItems.push({ id: t.id || `phone_${i}`, name: t.description, sellingPrice: t.price, costPrice: t.cost || 0, profit: t.profit || 0 });
+        } else if (t.category === 'balance' || t.category === 'sims' || t.type?.startsWith('balance')) {
+          rechargeTotal += t.price;
+          rechargeProfit += (t.profit || 0);
+        } else if (t.category === 'expenses' || t.type?.startsWith('expense')) {
+          expenseList.push({ id: t.id || `exp_${i}`, description: t.description, amount: t.price });
+        } else if (t.supplierName) {
+          supTransfers.push({ id: t.id || `sup_${i}`, supplier: t.supplierName, amount: t.price });
+        }
+      });
+
+      const updatedDay: DayRecord = {
+        ...targetDay,
+        accessories: accItems,
+        maintenance: maintItems,
+        phones: phoneItems,
+        recharge: {
+          totalWithProfit: rechargeTotal,
+          profit: rechargeProfit,
+        },
+        expenses: expenseList,
+        supplierTransfers: supTransfers,
+        updatedAt: new Date().toISOString(),
+      };
+
+      syncDayToCloud(updatedDay);
+      return prev.map((d) => (d.date === date ? updatedDay : d));
     });
   };
 

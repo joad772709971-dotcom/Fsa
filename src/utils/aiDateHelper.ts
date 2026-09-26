@@ -70,7 +70,7 @@ export function parseDateFromNaturalText(
   const normalized = normalizeDigits(rawText);
   const text = normalized.toLowerCase().trim();
 
-  // كلمات مفتاحية صريحة لطلب العرض فقط
+  // كلمات مفتاحية صريحة لطلب العرض والجلب فقط
   const explicitViewKeywords = [
     'عرض',
     'اعرض',
@@ -81,6 +81,15 @@ export function parseDateFromNaturalText(
     'شوف',
     'اطّلع',
     'اطلع',
+    'اجلب',
+    'جلب',
+    'جيب',
+    'هات لي',
+    'بيانات',
+    'معلومات',
+    'ادخال',
+    'إدخال',
+    'يومية',
   ];
 
   const hasExplicitViewIntent = explicitViewKeywords.some((k) => text.startsWith(k) || text.includes(k));
@@ -91,12 +100,14 @@ export function parseDateFromNaturalText(
   const defaultMonth = parseInt(refMonthStr, 10) || 8;
 
   // 1. فحص ما إذا كان النص سؤالاً أو محادثة أو استشارة أو مسألة حسابية (لتجنب تفسيره كأمر انتقال لليوم)
+  // إذا كان هناك نية صريحة لجلب أو فتح اليومية نتجاوز شرط المحادثة
   const isConversationalOrQuestion =
-    text.includes('؟') ||
-    text.includes('?') ||
-    /\b(كيف|هل|ليش|لماذا|ماذا|ماهو|ما هو|ما هي|ماهي|ايش|شو|كم|احسب|حساب|استشر|استشارة|نصيحة|رايك|رأيك|اشرح|فهم|عرف|اريد|أريد|مرحبا|سلام|هلا|صباح|مساء)\b/i.test(
-      text
-    );
+    !hasExplicitViewIntent &&
+    (text.includes('؟') ||
+      text.includes('?') ||
+      /\b(كيف|هل|ليش|لماذا|ماذا|ماهو|ما هو|ما هي|ماهي|ايش|شو|كم|احسب|حساب|استشر|استشارة|نصيحة|رايك|رأيك|اشرح|فهم|عرف|مرحبا|سلام|هلا|صباح|مساء)\b/i.test(
+        text
+      ));
 
   // 1. فحص ذكر "اليوم"
   if (text.includes('اليوم') || text.includes('عمل اليوم') || text.includes('كشف اليوم')) {

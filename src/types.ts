@@ -257,6 +257,7 @@ export interface DayRecord {
   grossProfit?: number;
   mosaabShare?: number;
   managerShare?: number;
+  updatedAt?: string;
 }
 
 export interface SupplierSummary {

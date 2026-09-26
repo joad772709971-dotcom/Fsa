@@ -23,6 +23,9 @@ import {
   saveInventory,
   saveCustomers,
   isSalesMaintBalanceTx,
+  getDeletedTxIds,
+  markTxDeleted,
+  unmarkTxDeleted,
 } from './storage';
 import { loadPriceMemory, savePriceMemory } from './priceMemoryStorage';
 
@@ -92,10 +95,12 @@ export function cleanPayloadForFirestore<T>(data: T): T {
  */
 export async function syncTransactionToCloud(tx: Transaction): Promise<void> {
   try {
+    unmarkTxDeleted(tx.id);
+    deleteDoc(doc(db, 'deleted_transactions', tx.id)).catch(() => {});
     const docRef = doc(db, 'transactions', tx.id);
     const sanitized = cleanPayloadForFirestore({
       ...tx,
-      updatedAt: new Date().toISOString(),
+      updatedAt: tx.updatedAt || new Date().toISOString(),
     });
     await setDoc(docRef, sanitized, { merge: true });
     updateLastSyncTime();
@@ -185,11 +190,22 @@ export async function syncPriceMemoryToCloud(mem: PriceMemoryItem): Promise<void
 }
 
 /**
- * Delete transaction from cloud
+ * Delete transaction from cloud and record tombstone to prevent resurrection across devices
  */
 export async function deleteTransactionFromCloud(id: string): Promise<void> {
   try {
+    markTxDeleted(id);
     await deleteDoc(doc(db, 'transactions', id));
+    // تسجيل علامة الحذف سحابياً لمنع أي جهاز آخر من إعادة رفع أو استرجاع العملية
+    await setDoc(
+      doc(db, 'deleted_transactions', id),
+      {
+        id,
+        deletedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    ).catch(() => {});
+    updateLastSyncTime();
   } catch (err) {
     console.warn('Failed to delete transaction from cloud:', id, err);
   }
@@ -226,14 +242,48 @@ export function startRealtimeSync(
   // Stop existing listeners if any
   stopRealtimeSync();
 
+  // 0. Deleted Transactions Listener (Instant propagation of deletions across all devices: APK, EXE, Web)
+  const unsubDeleted = onSnapshot(
+    collection(db, 'deleted_transactions'),
+    (snapshot) => {
+      if (!snapshot.empty) {
+        let changed = false;
+        const localTxs = loadTransactions();
+        const deletedIds = getDeletedTxIds();
+
+        snapshot.forEach((docSnap) => {
+          const id = docSnap.id;
+          if (!deletedIds.has(id)) {
+            markTxDeleted(id);
+            deletedIds.add(id);
+            changed = true;
+          }
+        });
+
+        if (changed) {
+          const active = localTxs.filter((t) => !deletedIds.has(t.id));
+          saveTransactions(active);
+          onDataUpdate?.('transactions');
+        }
+      }
+    },
+    (_err) => {}
+  );
+  unsubscribers.push(unsubDeleted);
+
   // 1. Transactions Listener
   const unsubTx = onSnapshot(
     collection(db, 'transactions'),
     (snapshot) => {
       if (!snapshot.empty) {
         const cloudTxs: Transaction[] = [];
+        const deletedIds = getDeletedTxIds();
+
         snapshot.forEach((docSnap) => {
-          cloudTxs.push(docSnap.data() as Transaction);
+          const t = docSnap.data() as Transaction;
+          if (!deletedIds.has(t.id)) {
+            cloudTxs.push(t);
+          }
         });
 
         // Merge with local transactions
@@ -244,25 +294,32 @@ export function startRealtimeSync(
         // Identify new transactions added remotely and handle removals
         snapshot.docChanges().forEach((change) => {
           if (change.type === 'removed') {
+            markTxDeleted(change.doc.id);
             localMap.delete(change.doc.id);
           } else if (change.type === 'added') {
             const data = change.doc.data() as Transaction;
-            if (!localMap.has(data.id)) {
+            if (!deletedIds.has(data.id) && !localMap.has(data.id)) {
               incomingNewTxs.push(data);
             }
           }
         });
 
         cloudTxs.forEach((cTx) => {
+          if (deletedIds.has(cTx.id)) return;
           // Remove any legacy compound August transactions from cloud if found
           if (cTx.id && cTx.id.startsWith('tx_202608') && cTx.id.endsWith('_acc')) {
             deleteDoc(doc(db, 'transactions', cTx.id)).catch(() => {});
             return;
           }
+          const localTx = localMap.get(cTx.id);
+          // حماية التعديلات المحلية (خاصة أثناء انقطاع الإنترنت أو التعديل الفوري)
+          if (localTx && localTx.updatedAt && cTx.updatedAt && localTx.updatedAt > cTx.updatedAt) {
+            return;
+          }
           localMap.set(cTx.id, cTx);
         });
 
-        const merged = Array.from(localMap.values());
+        const merged = Array.from(localMap.values()).filter((t) => !deletedIds.has(t.id));
         merged.sort((a, b) => {
           const dateCmp = (b.date || '').localeCompare(a.date || '');
           if (dateCmp !== 0) return dateCmp;
@@ -438,16 +495,11 @@ export function startRealtimeSync(
           if (!existing) {
             localMap.set(cd.id, cd);
           } else {
-            // Merge day records safely preserving all cashier sales & entries
-            localMap.set(cd.id, {
-              ...existing,
-              ...cd,
-              accessories: (cd.accessories && cd.accessories.length > 0) ? cd.accessories : (existing.accessories || []),
-              phones: (cd.phones && cd.phones.length > 0) ? cd.phones : (existing.phones || []),
-              maintenance: (cd.maintenance && cd.maintenance.length > 0) ? cd.maintenance : (existing.maintenance || []),
-              recharge: (cd.recharge && cd.recharge.totalWithProfit > 0) ? cd.recharge : (existing.recharge || cd.recharge),
-              supplierTransfers: (cd.supplierTransfers && cd.supplierTransfers.length > 0) ? cd.supplierTransfers : (existing.supplierTransfers || []),
-            });
+            // إذا كانت النسخة المحلية أحدث (تم تعديلها أو حفظها محلياً)، نحتفظ بالتعديل المحلي
+            if (existing.updatedAt && cd.updatedAt && existing.updatedAt > cd.updatedAt) {
+              return;
+            }
+            localMap.set(cd.id, cd);
           }
         });
 
@@ -505,8 +557,18 @@ export async function triggerFullSync(): Promise<{ success: boolean; message: st
   try {
     const batchSize = 300;
 
-    // 1. Push all local transactions to Firestore in batches (sanitized against undefined values)
-    const localTxs = loadTransactions();
+    // 0. Sync tombstones from deleted_transactions
+    const deletedSnap = await getDocs(collection(db, 'deleted_transactions')).catch(() => null);
+    const deletedIds = getDeletedTxIds();
+    if (deletedSnap && !deletedSnap.empty) {
+      deletedSnap.forEach((d) => {
+        deletedIds.add(d.id);
+        markTxDeleted(d.id);
+      });
+    }
+
+    // 1. Push all active local transactions to Firestore in batches (sanitized against undefined values)
+    const localTxs = loadTransactions().filter((t) => !deletedIds.has(t.id));
     for (let i = 0; i < localTxs.length; i += batchSize) {
       const chunk = localTxs.slice(i, i + batchSize);
       const batch = writeBatch(db);
@@ -598,6 +660,7 @@ export async function triggerFullSync(): Promise<{ success: boolean; message: st
       const cloudTxs: Transaction[] = [];
       remoteTxSnap.forEach((d) => {
         const data = d.data() as Transaction;
+        if (deletedIds.has(data.id)) return;
         if (data.id && data.id.startsWith('tx_202608') && data.id.endsWith('_acc')) {
           deleteDoc(doc(db, 'transactions', data.id)).catch(() => {});
           return;
@@ -605,8 +668,12 @@ export async function triggerFullSync(): Promise<{ success: boolean; message: st
         cloudTxs.push(data);
       });
       const localMap = new Map<string, Transaction>(localTxs.map((t) => [t.id, t]));
-      cloudTxs.forEach((ct) => localMap.set(ct.id, ct));
-      const merged = Array.from(localMap.values());
+      cloudTxs.forEach((ct) => {
+        if (!deletedIds.has(ct.id)) {
+          localMap.set(ct.id, ct);
+        }
+      });
+      const merged = Array.from(localMap.values()).filter((t) => !deletedIds.has(t.id));
       saveTransactions(merged);
       totalSyncedTxs = merged.length;
     }

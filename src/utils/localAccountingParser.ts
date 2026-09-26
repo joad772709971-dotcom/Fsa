@@ -1900,7 +1900,7 @@ export function reverseTransactionsToStructuredSections(
   // 1. مبيعات الإكسسوارات
   const accessoriesTxs = dayTransactions.filter(
     (t) =>
-      t.category === 'accessories' &&
+      (t.category === 'accessories' || (t.type === 'sale' && t.category !== 'phones' && t.category !== 'balance' && t.category !== 'sims' && !t.description?.includes('جوال') && !t.description?.includes('تلفون'))) &&
       t.type !== 'purchase' &&
       !t.type?.startsWith('return_') &&
       !t.type?.startsWith('transfer_')
@@ -1918,7 +1918,7 @@ export function reverseTransactionsToStructuredSections(
   // 2. خدمات الصيانة والبرمجة
   const maintenanceTxs = dayTransactions.filter(
     (t) =>
-      t.category === 'maintenance' &&
+      (t.category === 'maintenance' || t.type === 'maintenance') &&
       t.type !== 'purchase' &&
       !t.type?.startsWith('return_') &&
       !t.type?.startsWith('transfer_') &&
@@ -1941,7 +1941,7 @@ export function reverseTransactionsToStructuredSections(
   // 3. مبيعات الجوالات
   const phonesTxs = dayTransactions.filter(
     (t) =>
-      t.category === 'phones' &&
+      (t.category === 'phones' || ((t.description?.includes('جوال') || t.description?.includes('تلفون') || t.description?.includes('هاتف')) && t.type === 'sale')) &&
       t.type !== 'purchase' &&
       !t.type?.startsWith('return_') &&
       !t.type?.startsWith('transfer_')
@@ -1964,6 +1964,7 @@ export function reverseTransactionsToStructuredSections(
       t.type === 'balance_hadi' ||
       t.type === 'balance_qimma' ||
       t.type === 'sim' ||
+      t.type?.startsWith('balance') ||
       t.type === 'transfer_mohammed_mayas' ||
       t.type === 'transfer_faiez_abu_ali'
   );
@@ -1980,7 +1981,7 @@ export function reverseTransactionsToStructuredSections(
   // 5. الخرج والمصروفات (بدون عهدة مصعب وحوالات الموردين)
   const expensesTxs = dayTransactions.filter(
     (t) =>
-      t.category === 'expenses' &&
+      (t.category === 'expenses' || t.type?.startsWith('expense') || t.type?.startsWith('withdrawal')) &&
       t.type !== 'mosaab_purchases_fund' &&
       !t.type?.startsWith('transfer_') &&
       !t.supplierName &&

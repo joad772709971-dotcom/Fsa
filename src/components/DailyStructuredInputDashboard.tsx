@@ -62,6 +62,7 @@ interface DailyStructuredInputDashboardProps {
   suppliers?: Supplier[];
   onViewDayDetail?: (date: string) => void;
   onShowNotification?: (message: string, type?: 'success' | 'warning' | 'error') => void;
+  forceRefreshTrigger?: number;
 }
 
 // نموذج تجريبي معتمد ليوم 1 شهر 9 مع مشتريات الموردين وعهدة مصعب
@@ -113,6 +114,7 @@ export const DailyStructuredInputDashboard: React.FC<DailyStructuredInputDashboa
   suppliers = [],
   onViewDayDetail,
   onShowNotification,
+  forceRefreshTrigger,
 }) => {
   // الحقول النصية للأقسام الستة
   const [sections, setSections] = useState<StructuredDailyInput>({
@@ -320,6 +322,15 @@ export const DailyStructuredInputDashboard: React.FC<DailyStructuredInputDashboa
   const handleLoadDayData = (dateToLoad: string = currentDate) => {
     const txsForDate = transactions.filter((t) => t.date === dateToLoad);
     if (txsForDate.length === 0) {
+      setSections({
+        accessoriesText: '',
+        maintenanceText: '',
+        phonesText: '',
+        balanceText: '',
+        expensesText: '',
+        purchasesText: '',
+      });
+      setProcessedResult(null);
       return;
     }
 
@@ -339,9 +350,12 @@ export const DailyStructuredInputDashboard: React.FC<DailyStructuredInputDashboa
     } catch (e) {
       console.error('Error auto-evaluating loaded day:', e);
     }
-
-    // تم إلغاء الإشعار المتكرر بناءً على طلب المستخدم
   };
+
+  // جلب وتوزيع بيانات اليوم تلقائياً عند اختيار أو تغيير التاريخ أو طلب الجلب السريع
+  useEffect(() => {
+    handleLoadDayData(currentDate);
+  }, [currentDate, forceRefreshTrigger]);
 
   const handleJumpToDate = (targetDate: string) => {
     onDateChange(targetDate);

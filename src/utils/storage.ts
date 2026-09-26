@@ -243,96 +243,103 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
 
 export const INITIAL_CUSTOMERS: CustomerDebt[] = [];
 
+// سجل معرفات القيود المحذوفة لمنع استرجاعها تلقائياً عند إعادة فتح التطبيق أو المزامنة
+const DELETED_TX_IDS_KEY = 'mosaab_deleted_tx_ids';
+
+export function getDeletedTxIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_TX_IDS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch (e) {}
+  return new Set();
+}
+
+export function markTxDeleted(id: string): void {
+  try {
+    const set = getDeletedTxIds();
+    set.add(id);
+    localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(Array.from(set)));
+  } catch (e) {}
+}
+
+export function unmarkTxDeleted(id: string): void {
+  try {
+    const set = getDeletedTxIds();
+    if (set.has(id)) {
+      set.delete(id);
+      localStorage.setItem(DELETED_TX_IDS_KEY, JSON.stringify(Array.from(set)));
+    }
+  } catch (e) {}
+}
+
 export function loadTransactions(): Transaction[] {
   try {
     const data = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
-    if (data) {
+    const deletedIds = getDeletedTxIds();
+
+    if (data !== null) {
       const parsed = JSON.parse(data);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        // تنقية وتحديث وإزالة أي معاملات قديمة أو ملغية لمياس / الهادي للفترة 2026-08-01 حتى 2026-09-22
-        const hasLegacyCompound = parsed.some((t: Transaction) => t.id && t.id.startsWith('tx_202608') && t.id.endsWith('_acc'));
-        let cleanedParsed = parsed.filter(
-          (t: Transaction) => {
-            if (
-              t.id === 'tx-101' ||
-              t.id === 'tx-102' ||
-              t.id === 'tx-103' ||
-              t.id === 'tx-104' ||
-              t.id === 'tx-105' ||
-              t.id === 'tx-106' ||
-              t.id === 'tx-107' ||
-              t.id === 'tx-108' ||
-              t.referenceNo === 'RENT-Q3' ||
-              t.referenceNo === 'UTIL-0926' ||
-              t.description?.includes('إيجار مقر') ||
-              t.description?.includes('ايجار مقر') ||
-              t.description?.includes('فاتورة كهرباء وإنترنت للمقر')
-            ) {
-              return false;
-            }
+      if (Array.isArray(parsed)) {
+        // تنقية وتحديث أي معاملات ملغية أو محذوفة سابقاً
+        const cleanedParsed = parsed.filter((t: Transaction) => {
+          if (!t || !t.id) return false;
+          if (deletedIds.has(t.id)) return false;
 
-            // Purge old Mayas/Hadi records for the updated period
-            const isMayasOrHadi =
-              (t.supplierName && t.supplierName.includes('مياس')) ||
-              (t.description && (t.description.includes('مياس') || t.description.includes('الهادي'))) ||
-              t.type === 'balance_hadi' ||
-              t.type === 'transfer_mohammed_mayas';
-
-            if (isMayasOrHadi && t.date >= '2026-08-01' && t.date <= '2026-09-22' && !t.id.startsWith('hadi-')) {
-              return false;
-            }
-
-            // إزالة عمليات البيع والصيانة المكررة المحذوفة من يوم 1 شهر 8
-            if (
-              t.date === '2026-08-01' &&
-              (t.type === 'sale' || t.type === 'maintenance' || t.category === 'accessories' || t.category === 'maintenance') &&
-              !INITIAL_TRANSACTIONS.some((seed) => seed.id === t.id)
-            ) {
-              return false;
-            }
-
-            return true;
+          if (
+            t.id === 'tx-101' ||
+            t.id === 'tx-102' ||
+            t.id === 'tx-103' ||
+            t.id === 'tx-104' ||
+            t.id === 'tx-105' ||
+            t.id === 'tx-106' ||
+            t.id === 'tx-107' ||
+            t.id === 'tx-108' ||
+            t.referenceNo === 'RENT-Q3' ||
+            t.referenceNo === 'UTIL-0926' ||
+            t.description?.includes('إيجار مقر') ||
+            t.description?.includes('ايجار مقر') ||
+            t.description?.includes('فاتورة كهرباء وإنترنت للمقر')
+          ) {
+            return false;
           }
-        );
-        if (hasLegacyCompound) {
-          cleanedParsed = cleanedParsed.filter((t: Transaction) => !(t.id && t.id.startsWith('tx_202608') && t.id.endsWith('_acc')));
-        }
 
-        // Merge missing seed transactions (including official Hadi transactions) if not present
-        const existingIds = new Set(cleanedParsed.map((t: Transaction) => t.id));
-        const missingSeeds = INITIAL_TRANSACTIONS.filter((seed) => !existingIds.has(seed.id));
-        let mergedList = cleanedParsed;
-        if (missingSeeds.length > 0 || hasLegacyCompound) {
-          mergedList = [...missingSeeds, ...cleanedParsed];
-        }
-        // ضمان عدم تكرار أي عملية بنفس المعرف الفريد ID
-        const uniqueTxMap = new Map<string, Transaction>();
-        mergedList.forEach((t: Transaction) => {
-          if (t.id && !uniqueTxMap.has(t.id)) {
-            uniqueTxMap.set(t.id, t);
+          // تنقية العمليات الملغية لمياس / الهادي
+          const isMayasOrHadi =
+            (t.supplierName && t.supplierName.includes('مياس')) ||
+            (t.description && (t.description.includes('مياس') || t.description.includes('الهادي'))) ||
+            t.type === 'balance_hadi' ||
+            t.type === 'transfer_mohammed_mayas';
+
+          if (isMayasOrHadi && t.date >= '2026-08-01' && t.date <= '2026-09-22' && !t.id.startsWith('hadi-')) {
+            return false;
           }
+
+          return true;
         });
-        mergedList = Array.from(uniqueTxMap.values());
-        mergedList.sort((a, b) => {
+
+        // فرز العمليات تنازلياً بحسب التاريخ والوقت
+        cleanedParsed.sort((a, b) => {
           const dateCmp = (b.date || '').localeCompare(a.date || '');
           if (dateCmp !== 0) return dateCmp;
           return (b.time || '').localeCompare(a.time || '');
         });
-        if (missingSeeds.length > 0 || hasLegacyCompound || mergedList.length !== parsed.length) {
-          try {
-            localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(mergedList));
-          } catch (err) {
-            // ignore
-          }
-        }
+
         // عزل أي سجلات أجنبية برمجياً بواسطة خدمة التدقيق الجنائي
-        const { validItems } = ForensicAuditorService.quarantineBreachedItems(mergedList, CURRENT_STORE_ID);
+        const { validItems } = ForensicAuditorService.quarantineBreachedItems(cleanedParsed, CURRENT_STORE_ID);
         return validItems;
       }
     }
   } catch (e) {
     console.error('Failed to load transactions from localStorage', e);
   }
+
+  // التهيئة الأولية للمرة الأولى فقط عند تشغيل التطبيق في جهاز فارغ تماماً
+  try {
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(INITIAL_TRANSACTIONS));
+  } catch (err) {}
   return INITIAL_TRANSACTIONS;
 }
 

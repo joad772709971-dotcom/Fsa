@@ -182,6 +182,7 @@ export const SmartAIAssistant: React.FC<SmartAIAssistantProps> = ({
   const [parsedDetectedDate, setParsedDetectedDate] = useState<string | undefined>(undefined);
   const [parsedDetectedSupplier, setParsedDetectedSupplier] = useState<string | undefined>(undefined);
   const [parseSummary, setParseSummary] = useState<string>('');
+  const [forceRefreshTrigger, setForceRefreshTrigger] = useState<number>(0);
 
   // Autonomous CFO & Proactive Radar state
   const [radarAlert, setRadarAlert] = useState<CFORadarAlert | null>(null);
@@ -882,15 +883,26 @@ export const SmartAIAssistant: React.FC<SmartAIAssistantProps> = ({
     setLiveTranscript('');
     setIsLoading(true);
 
-    // 0. Check for natural language date view or day queries (e.g., "اعرض عمل يوم 25 شهر 8")
+    // 0. Check for natural language date view or day queries (e.g., "اجلب معلومات يوم 1 شهر 8 في قسم الإدخال اليومي")
     const dateCheck = parseDateFromNaturalText(query, currentDate, availableDates);
-    if (dateCheck.isDayViewQuery && dateCheck.targetDate && !dateCheck.hasAdditionalContent) {
+    const isDailyInputIntent =
+      query.includes('ادخال') ||
+      query.includes('إدخال') ||
+      query.includes('اجلب') ||
+      query.includes('جلب') ||
+      query.includes('جيب') ||
+      query.includes('هات') ||
+      query.includes('قسم') ||
+      query.includes('يومية');
+
+    if (dateCheck.isDayViewQuery && dateCheck.targetDate && (!dateCheck.hasAdditionalContent || isDailyInputIntent)) {
       const targetDate = dateCheck.targetDate;
       onDateChange(targetDate);
-      setViewMode('day_detail');
+      setForceRefreshTrigger(Date.now());
+      setViewMode('daily_input');
 
       const targetFormatted = formatArabicDateDisplay(targetDate);
-      const replyText = `تم فتح كشف وتفاصيل عمل ${targetFormatted} (${targetDate}) بالكامل.\nيمكنك الآن تعديل أي مبلغ أو بيان أو تكلفة أو نوع مباشرة داخل الجدول، ويتم الحفظ الفوري تلقائياً!`;
+      const replyText = `✅ تم جلب معلومات ${targetFormatted} (${targetDate}) بالكامل في قسم الإدخال اليومي المنظم.\n\n• تم توزيع كل بند في مكانه المعتمد بدقة:\n  - مبيعات الإكسسوارات\n  - خدمات الصيانة والبرمجة\n  - مبيعات الجوالات\n  - الرصيد والشبكات والتحويلات\n  - المصروفات والخرج وصرفة المحل والبيت\n  - المشتريات والموردين والعهدة\n\n• عند الضغط على "حفظ واستبدال بيانات اليوم" أو "حفظ واعتماد اليومية"، سيتم قيد كل شيء بمكانه الصحيح وتحديث المخزون والمزامنة اللحظية الشاملة!`;
 
       const botMsg: ChatMessage = {
         id: `bot_date_${Date.now()}`,
@@ -905,7 +917,41 @@ export const SmartAIAssistant: React.FC<SmartAIAssistantProps> = ({
       setIsLoading(false);
 
       if (shouldSpeak) {
-        handlePlayVoice(`تم فتح كشف عمل ${targetFormatted} بالتفصيل.`, botMsg.id);
+        handlePlayVoice(`تم جلب وتوزيع معلومات ${targetFormatted} في قسم الإدخال اليومي.`, botMsg.id);
+      }
+      return;
+    }
+
+    // 0.A فحص طلب فتح قسم الإدخال اليومي العام
+    const isGeneralDailyInputOpen =
+      (query.includes('قسم الادخال') ||
+        query.includes('قسم الإدخال') ||
+        query.includes('الإدخال اليومي') ||
+        query.includes('الادخال اليومي') ||
+        query.includes('لوحة الادخال') ||
+        query.includes('لوحة الإدخال')) &&
+      !dateCheck.targetDate;
+
+    if (isGeneralDailyInputOpen) {
+      setViewMode('daily_input');
+      setForceRefreshTrigger(Date.now());
+      const targetFormatted = formatArabicDateDisplay(currentDate);
+      const replyText = `✅ تم فتح قسم الإدخال اليومي المنظم ليوم ${targetFormatted} (${currentDate}).\n\n• تم تجهيز الأقسام وتوزيع بنود اليوم في مكانها المعتمد:\n  - مبيعات الإكسسوارات\n  - خدمات الصيانة والبرمجة\n  - مبيعات الجوالات\n  - الرصيد والشبكات والتحويلات\n  - المصروفات والخرج وصرفة المحل والبيت\n  - المشتريات والموردين والعهدة\n\n• يمكنك مراجعة وتعديل أي بند، وعند الضغط على "حفظ واعتماد اليومية" يتم قيد وحفظ كل شيء فورياً بمكانه وتحديث الأرصدة والمخزون والمزامنة اللحظية!`;
+
+      const botMsg: ChatMessage = {
+        id: `bot_daily_input_${Date.now()}`,
+        sender: 'assistant',
+        text: replyText,
+        timestamp: new Date().toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' }),
+        linkedDate: currentDate,
+        isVoiceResponse: isVoiceQuery,
+      };
+
+      setMessages((prev) => [...prev, botMsg]);
+      setIsLoading(false);
+
+      if (shouldSpeak) {
+        handlePlayVoice(`تم فتح قسم الإدخال اليومي ليوم ${targetFormatted}.`, botMsg.id);
       }
       return;
     }
@@ -2218,6 +2264,7 @@ export const SmartAIAssistant: React.FC<SmartAIAssistantProps> = ({
                   handlePlayVoice(msg);
                 }
               }}
+              forceRefreshTrigger={forceRefreshTrigger}
             />
           </div>
         ) : viewMode === 'system_audit' ? (
