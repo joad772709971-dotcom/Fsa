@@ -182,6 +182,15 @@ export default function App() {
           list = parsed.map((d) => {
             const seed = initialMap.get(d.date);
             if (!seed) return d;
+            // تنقية سجلات يوم 1 شهر 8 من التكرار القديم
+            if (d.date === '2026-08-01' && ((d.accessories && d.accessories.length > 6) || (d.maintenance && d.maintenance.length > 2))) {
+              return {
+                ...d,
+                accessories: seed.accessories || [],
+                phones: seed.phones || [],
+                maintenance: seed.maintenance || [],
+              };
+            }
             const hasSales =
               (d.accessories && d.accessories.length > 0) ||
               (d.phones && d.phones.length > 0) ||

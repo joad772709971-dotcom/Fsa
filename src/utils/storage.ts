@@ -282,6 +282,15 @@ export function loadTransactions(): Transaction[] {
               return false;
             }
 
+            // إزالة عمليات البيع والصيانة المكررة المحذوفة من يوم 1 شهر 8
+            if (
+              t.date === '2026-08-01' &&
+              (t.type === 'sale' || t.type === 'maintenance' || t.category === 'accessories' || t.category === 'maintenance') &&
+              !INITIAL_TRANSACTIONS.some((seed) => seed.id === t.id)
+            ) {
+              return false;
+            }
+
             return true;
           }
         );

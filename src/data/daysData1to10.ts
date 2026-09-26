@@ -12,14 +12,8 @@ export const DAYS_1_TO_10: DayRecord[] = [
       { id: 'd1-acc-2', name: 'لاصق', price: 400 },
       { id: 'd1-acc-3', name: 'بطارية J7', price: 1500 },
       { id: 'd1-acc-4', name: 'ريموت مع الحجار', price: 500 },
-      { id: 'd1-acc-5', name: 'لاصق', price: 500 },
       { id: 'd1-acc-6', name: 'سماعة عادي', price: 300 },
-      { id: 'd1-acc-7', name: 'رايحة', price: 1000 },
-      { id: 'd1-acc-8', name: 'سماعة أذن واحدة سوداء', price: 1000 },
-      { id: 'd1-acc-9', name: 'خاتم رجالي', price: 400 },
-      { id: 'd1-acc-10', name: 'خاتم رجالي', price: 400 },
-      { id: 'd1-acc-11', name: 'سماعة رقبة', price: 3000 },
-      { id: 'd1-acc-12', name: 'بطارية J4', price: 1500 }
+      { id: 'd1-acc-7', name: 'رايحة', price: 1000 }
     ],
     phones: [
       {
@@ -32,9 +26,7 @@ export const DAYS_1_TO_10: DayRecord[] = [
     ],
     maintenance: [
       { id: 'd1-maint-1', deviceOrService: 'واصل ستايل فور', price: 8000, type: 'شاشات', status: 'واصل' },
-      { id: 'd1-maint-2', deviceOrService: 'برمجة', price: 1000, type: 'برمجة وفورمات', status: 'خالص' },
-      { id: 'd1-maint-3', deviceOrService: 'بيت شحن', price: 1000, type: 'بيوت شحن وفلاتات', status: 'خالص' },
-      { id: 'd1-maint-4', deviceOrService: 'بيت شحن', price: 1000, type: 'بيوت شحن وفلاتات', status: 'خالص' }
+      { id: 'd1-maint-2', deviceOrService: 'برمجة', price: 1000, type: 'برمجة وفورمات', status: 'خالص' }
     ],
     recharge: {
       totalWithProfit: 22000,
