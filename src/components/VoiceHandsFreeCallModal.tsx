@@ -574,13 +574,31 @@ export const VoiceHandsFreeCallModal: React.FC<VoiceHandsFreeCallModalProps> = (
     });
 
     sessionControllerRef.current = controller;
-    controller.start();
 
-    // Welcome verbal greeting: Eloquent, concise, non-restrictive greeting
+    // Welcome verbal greeting: speak greeting first, then seamlessly engage continuous mic listening
     logMessageRef.current('مرحباً بك، بماذا أساعدك؟', 'assistant');
-    speakAssistantRef.current('مرحباً بك، بماذا أساعدك؟');
+    let hasStartedListening = false;
+
+    const startListeningSafely = () => {
+      if (hasStartedListening) return;
+      hasStartedListening = true;
+      if (sessionControllerRef.current) {
+        sessionControllerRef.current.start();
+      }
+    };
+
+    // Speak greeting and start listening on completion
+    speakAssistantRef.current('مرحباً بك، بماذا أساعدك؟', () => {
+      startListeningSafely();
+    });
+
+    // Fallback safety timer: ensure listening starts within 2.5s even if TTS is silent or slow
+    const fallbackTimer = setTimeout(() => {
+      startListeningSafely();
+    }, 2200);
 
     return () => {
+      clearTimeout(fallbackTimer);
       controller.stop();
       stopSpeaking();
       sessionControllerRef.current = null;

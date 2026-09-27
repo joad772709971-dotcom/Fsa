@@ -94,6 +94,10 @@ import {
   SupplierTransferItem,
   ReturnItem,
   MusabItem,
+  AccessoryItem,
+  MaintenanceItem,
+  PhoneItem,
+  ExpenseItem,
   DEFAULT_SHOP_SETTINGS,
 } from './types';
 import {
@@ -876,28 +880,53 @@ export default function App() {
     // 5. تحديث سجل اليومية (days / DayRecord) فورياً وتزامنه سحابياً
     setDays((prev) => {
       const targetDay = getOrCreateDayForDate(date, prev);
-      const accItems: { id: string; name: string; price: number }[] = [];
-      const maintItems: { id: string; deviceOrService: string; price: number; type: string; status: string }[] = [];
-      const phoneItems: { id: string; name: string; sellingPrice: number; costPrice: number; profit: number }[] = [];
+      const accItems: AccessoryItem[] = [];
+      const maintItems: MaintenanceItem[] = [];
+      const phoneItems: PhoneItem[] = [];
       let rechargeTotal = 0;
       let rechargeProfit = 0;
-      const expenseList: { id: string; description: string; amount: number }[] = [];
-      const supTransfers: { id: string; supplier: string; amount: number }[] = [];
+      const expenseList: ExpenseItem[] = [];
+      const supTransfers: SupplierTransferItem[] = [];
 
       sanitizedList.forEach((t, i) => {
         if (t.category === 'accessories' || (t.type === 'sale' && t.category !== 'phones')) {
           accItems.push({ id: t.id || `acc_${i}`, name: t.description, price: t.price });
         } else if (t.category === 'maintenance' || t.type === 'maintenance') {
-          maintItems.push({ id: t.id || `maint_${i}`, deviceOrService: t.description, price: t.price, type: 'شاشات وصيانة', status: 'خالص' });
+          maintItems.push({ 
+            id: t.id || `maint_${i}`, 
+            deviceOrService: t.description, 
+            price: t.price, 
+            type: 'شاشات', 
+            status: 'خالص' 
+          });
         } else if (t.category === 'phones') {
-          phoneItems.push({ id: t.id || `phone_${i}`, name: t.description, sellingPrice: t.price, costPrice: t.cost || 0, profit: t.profit || 0 });
+          phoneItems.push({ 
+            id: t.id || `phone_${i}`, 
+            model: t.description, 
+            name: t.description, 
+            salePrice: t.price, 
+            purchaseCost: t.cost || 0, 
+            paidAmount: t.price,
+            profit: t.profit || 0,
+            status: 'تم الدفع بالكامل'
+          });
         } else if (t.category === 'balance' || t.category === 'sims' || t.type?.startsWith('balance')) {
           rechargeTotal += t.price;
           rechargeProfit += (t.profit || 0);
         } else if (t.category === 'expenses' || t.type?.startsWith('expense')) {
-          expenseList.push({ id: t.id || `exp_${i}`, description: t.description, amount: t.price });
+          expenseList.push({ 
+            id: t.id || `exp_${i}`, 
+            description: t.description, 
+            amount: t.price,
+            category: 'صرفة المحل'
+          });
         } else if (t.supplierName) {
-          supTransfers.push({ id: t.id || `sup_${i}`, supplier: t.supplierName, amount: t.price });
+          supTransfers.push({ 
+            id: t.id || `sup_${i}`, 
+            supplierName: t.supplierName, 
+            amountSent: t.price,
+            purchasesReceivedValue: 0
+          });
         }
       });
 
@@ -908,7 +937,8 @@ export default function App() {
         phones: phoneItems,
         recharge: {
           totalWithProfit: rechargeTotal,
-          profit: rechargeProfit,
+          totalWithoutProfit: Math.max(0, rechargeTotal - rechargeProfit),
+          totalProfit: rechargeProfit,
         },
         expenses: expenseList,
         supplierTransfers: supTransfers,

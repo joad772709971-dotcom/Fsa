@@ -93,6 +93,8 @@ export interface Transaction {
   // Multi-tenant isolation fields
   storeId?: string;
   ownerId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 
   // Custom metadata
   supplierId?: string; // المورد (العبصري، القاسمي، خليل، الهادي، القمة...)

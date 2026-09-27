@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Calendar,
   Save,
@@ -151,7 +151,7 @@ export const DailyStructuredInputDashboard: React.FC<DailyStructuredInputDashboa
 
   // التحقق هل اليوم مسجل مسبقاً في قاعدة البيانات
   const existingDayTransactions = useMemo(() => {
-    return transactions.filter((t) => t.date === currentDate);
+    return (transactions || []).filter((t) => t && t.date === currentDate);
   }, [transactions, currentDate]);
 
   const isDayAlreadyRegistered = existingDayTransactions.length > 0;
@@ -320,7 +320,7 @@ export const DailyStructuredInputDashboard: React.FC<DailyStructuredInputDashboa
 
   // دالة جلب بيانات اليوم المختار وتوزيع كل شيء في مكانه للتعديل
   const handleLoadDayData = (dateToLoad: string = currentDate) => {
-    const txsForDate = transactions.filter((t) => t.date === dateToLoad);
+    const txsForDate = (transactions || []).filter((t) => t && t.date === dateToLoad);
     if (txsForDate.length === 0) {
       setSections({
         accessoriesText: '',

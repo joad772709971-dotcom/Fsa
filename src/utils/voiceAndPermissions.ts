@@ -3,6 +3,8 @@
  * Designed for cross-platform compatibility across Web, Android WebView (APK), and Windows Desktop (EXE).
  */
 
+import { getApiBaseUrl } from './apkConfig';
+
 export interface VoiceOptions {
   rate?: number;
   pitch?: number;
@@ -287,7 +289,8 @@ export function playAudioTts(text: string, options: VoiceOptions = {}): boolean 
       } catch (e) {}
     }
 
-    const audioUrl = `/api/tts?text=${encodeURIComponent(cleaned)}&lang=ar`;
+    const apiBase = getApiBaseUrl();
+    const audioUrl = `${apiBase}/api/tts?text=${encodeURIComponent(cleaned)}&lang=ar`;
     const audio = new Audio(audioUrl);
     currentAudioElement = audio;
     audio.volume = options.volume ?? 1.0;
@@ -483,7 +486,8 @@ export function createSpeechRecognizer(
   onResult: (transcript: string, isFinal: boolean) => void,
   onError: (err: any) => void,
   onEnd: () => void,
-  langPreference: string = 'ar-YE'
+  langPreference: string = 'ar-YE',
+  continuous: boolean = false
 ): any {
   if (!isSpeechRecognitionSupported()) return null;
 
@@ -496,7 +500,7 @@ export function createSpeechRecognizer(
     // Prefer Yemeni or Saudi Arabic dialect which Android Speech Services support best
     recognition.lang = langPreference || 'ar-YE';
     recognition.interimResults = true;
-    recognition.continuous = false;
+    recognition.continuous = continuous;
     recognition.maxAlternatives = 3;
 
     recognition.onresult = (event: any) => {
@@ -552,31 +556,41 @@ export function createContinuousVoiceSession(callbacks: {
 }): ContinuousVoiceSessionController {
   let isSessionActive = false;
   let isPausedForSpeech = false;
+  let isStarting = false;
   let activeRecognizer: any = null;
   let restartTimeout: any = null;
+  let lastSessionStartTime = 0;
+  let consecutiveRapidCloses = 0;
+
+  const safeStopActiveRecognizer = () => {
+    if (activeRecognizer) {
+      try {
+        activeRecognizer.onend = null;
+        activeRecognizer.onerror = null;
+        activeRecognizer.onresult = null;
+        activeRecognizer.stop();
+      } catch (e) {}
+      activeRecognizer = null;
+    }
+  };
 
   const initRecognizer = () => {
-    if (!isSessionActive || isPausedForSpeech) return;
+    if (!isSessionActive || isPausedForSpeech || isStarting) return;
 
     try {
-      if (activeRecognizer) {
-        try {
-          activeRecognizer.onend = null;
-          activeRecognizer.onerror = null;
-          activeRecognizer.stop();
-        } catch (e) {}
-        activeRecognizer = null;
-      }
+      safeStopActiveRecognizer();
+      isStarting = true;
 
       const recognizer = createSpeechRecognizer(
         (transcript, isFinal) => {
           if (!isSessionActive || isPausedForSpeech) return;
+          consecutiveRapidCloses = 0;
           callbacks.onTranscript(transcript, isFinal);
         },
         (err) => {
           const errCode = err?.error || '';
           if (errCode === 'no-speech') {
-            // Normal silence period in continuous room audio
+            // Normal silence period in continuous room audio - ignore
             return;
           }
           if (errCode === 'aborted') {
@@ -592,31 +606,47 @@ export function createContinuousVoiceSession(callbacks: {
           callbacks.onError(err);
         },
         () => {
+          isStarting = false;
+          const sessionLifespan = Date.now() - lastSessionStartTime;
+          if (sessionLifespan < 800) {
+            consecutiveRapidCloses++;
+          } else {
+            consecutiveRapidCloses = 0;
+          }
+
           // OnEnd fired: auto-resume with stable debounce if session is active
+          // Back off intelligently if Chrome/Android repeatedly closes the connection to prevent UI flickering
           if (isSessionActive && !isPausedForSpeech) {
             if (restartTimeout) clearTimeout(restartTimeout);
+            const debounceDelay = consecutiveRapidCloses > 2 ? 1000 : 250;
             restartTimeout = setTimeout(() => {
               if (isSessionActive && !isPausedForSpeech) {
                 initRecognizer();
               }
-            }, 250);
+            }, debounceDelay);
           }
         },
-        callbacks.langPreference || 'ar-YE'
+        callbacks.langPreference || 'ar-YE',
+        true // Continuous recognition enabled!
       );
 
       if (recognizer) {
         activeRecognizer = recognizer;
+        lastSessionStartTime = Date.now();
         recognizer.start();
+        isStarting = false;
         callbacks.onStateChange('listening');
+      } else {
+        isStarting = false;
       }
     } catch (e) {
+      isStarting = false;
       console.warn('Failed to start continuous recognizer loop:', e);
       if (isSessionActive && !isPausedForSpeech) {
         if (restartTimeout) clearTimeout(restartTimeout);
         restartTimeout = setTimeout(() => {
           if (isSessionActive && !isPausedForSpeech) initRecognizer();
-        }, 300);
+        }, 800);
       }
     }
   };
@@ -626,31 +656,23 @@ export function createContinuousVoiceSession(callbacks: {
       unlockAudioAndSpeechSynthesis();
       isSessionActive = true;
       isPausedForSpeech = false;
+      consecutiveRapidCloses = 0;
       initRecognizer();
       return true;
     },
     stop: () => {
       isSessionActive = false;
       isPausedForSpeech = false;
+      isStarting = false;
       if (restartTimeout) clearTimeout(restartTimeout);
-      if (activeRecognizer) {
-        try {
-          activeRecognizer.onend = null;
-          activeRecognizer.onerror = null;
-          activeRecognizer.stop();
-        } catch (e) {}
-        activeRecognizer = null;
-      }
+      safeStopActiveRecognizer();
       callbacks.onStateChange('stopped');
     },
     pauseForSpeech: () => {
       isPausedForSpeech = true;
       callbacks.onStateChange('speaking');
-      if (activeRecognizer) {
-        try {
-          activeRecognizer.stop();
-        } catch (e) {}
-      }
+      if (restartTimeout) clearTimeout(restartTimeout);
+      safeStopActiveRecognizer();
     },
     resumeAfterSpeech: () => {
       if (!isSessionActive) return;
@@ -661,7 +683,7 @@ export function createContinuousVoiceSession(callbacks: {
         if (isSessionActive && !isPausedForSpeech) {
           initRecognizer();
         }
-      }, 80);
+      }, 150);
     },
     isActive: () => isSessionActive,
   };

@@ -35,6 +35,73 @@ async function startServer() {
     res.json({ status: 'ok', time: new Date().toISOString() });
   });
 
+  // Arabic Audio Speech Synthesis (TTS) endpoint
+  app.get('/api/tts', async (req, res) => {
+    try {
+      const text = String(req.query.text || '').trim().slice(0, 280);
+      const lang = String(req.query.lang || 'ar').trim();
+
+      if (!text) {
+        res.status(400).send('Text is required');
+        return;
+      }
+
+      // 1. Google Translate TTS audio proxy with Arabic pronunciation
+      const googleTtsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${encodeURIComponent(lang)}&client=tw-ob`;
+      const audioRes = await fetch(googleTtsUrl, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Referer: 'https://translate.google.com/',
+        },
+      });
+
+      if (audioRes.ok) {
+        const arrayBuffer = await audioRes.arrayBuffer();
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.send(Buffer.from(arrayBuffer));
+        return;
+      }
+
+      throw new Error(`TTS upstream status ${audioRes.status}`);
+    } catch (err: any) {
+      console.warn('TTS proxy error, trying Gemini TTS fallback:', err?.message || err);
+      try {
+        const text = String(req.query.text || '').trim().slice(0, 200);
+        const ai = getAI();
+        const geminiRes = await ai.models.generateContent({
+          model: 'gemini-3.8-flash-lite-tts',
+          contents: text,
+          config: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: 'Puck',
+                },
+              },
+            },
+          },
+        });
+
+        const part = geminiRes.candidates?.[0]?.content?.parts?.[0];
+        const audioData = (part as any)?.inlineData?.data;
+        if (audioData) {
+          const buffer = Buffer.from(audioData, 'base64');
+          res.setHeader('Content-Type', (part as any)?.inlineData?.mimeType || 'audio/wav');
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          res.send(buffer);
+          return;
+        }
+      } catch (geminiErr: any) {
+        console.warn('Gemini TTS fallback error:', geminiErr?.message || geminiErr);
+      }
+
+      res.status(502).json({ error: 'Failed to synthesize audio speech' });
+    }
+  });
+
   // Lazy GoogleGenAI client
   let aiClient: GoogleGenAI | null = null;
   function getAI(): GoogleGenAI {

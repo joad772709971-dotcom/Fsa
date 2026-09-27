@@ -333,13 +333,58 @@ export const SmartAIAssistant: React.FC<SmartAIAssistantProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, parsedPreview, isLoading, isRecording]);
 
+// Safe Error Boundary for Daily Input Dashboard inside Assistant
+class SafeDashboardBoundary extends React.Component<
+  { children: React.ReactNode; onFallbackToChat: () => void },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: any) {
+    console.warn('DailyStructuredInputDashboard caught by boundary:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex-1 p-6 flex flex-col items-center justify-center text-center bg-slate-50">
+          <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mb-3">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+          <h3 className="text-base font-bold text-slate-800 mb-1">لوحة الإدخال اليومي قيد التحديث</h3>
+          <p className="text-xs text-slate-600 max-w-md mb-4">
+            يمكنك الانتقال فوراً إلى وضع الدردشة والمسائل الحسابية المباشرة مع المحاسب الذكي أو إعادة المحاولة:
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => this.setState({ hasError: false, error: null })}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 cursor-pointer shadow-xs"
+            >
+              إعادة التحميل
+            </button>
+            <button
+              type="button"
+              onClick={this.props.onFallbackToChat}
+              className="px-4 py-2 bg-slate-200 text-slate-800 rounded-xl text-xs font-bold hover:bg-slate-300 cursor-pointer shadow-xs"
+            >
+              الانتقال للمحادثة المباشرة
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
   // Handle playing voice response
   const handlePlayVoice = useCallback((text: string, msgId?: string, isUserClick = false) => {
-    if (!isSpeechSynthesisSupported()) return;
-
-    if (isUserClick) {
-      unlockAudioAndSpeechSynthesis();
-    }
+    unlockAudioAndSpeechSynthesis();
 
     if (speakingMsgId === msgId) {
       stopSpeaking();
@@ -352,7 +397,7 @@ export const SmartAIAssistant: React.FC<SmartAIAssistantProps> = ({
       onEnd: () => setSpeakingMsgId(null),
       onError: (err: any) => {
         setSpeakingMsgId(null);
-        console.warn('Speech playback error / autoplay blocked:', err);
+        console.warn('Speech playback notice:', err);
         if (msgId) {
           setMessages((prev) =>
             prev.map((m) => (m.id === msgId ? { ...m, autoplayBlocked: true } : m))
@@ -2232,40 +2277,42 @@ export const SmartAIAssistant: React.FC<SmartAIAssistantProps> = ({
         {/* Main Content Area: Structured Daily Input Dashboard OR System Audit OR CFO Dedicated Radar OR Detailed Day Editor OR Embedded Tools OR Smart Chat View */}
         {viewMode === 'daily_input' ? (
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col h-full">
-            <DailyStructuredInputDashboard
-              currentDate={currentDate}
-              onDateChange={onDateChange}
-              availableDates={availableDates}
-              transactions={transactions}
-              onSaveDayTransactions={handleSaveStructuredDayTransactions}
-              onDeleteDayTransactions={(dateToDelete) => {
-                if (onOverwriteDayTransactions) {
-                  onOverwriteDayTransactions(dateToDelete, []);
-                } else {
-                  const toDelete = transactions.filter((t) => t.date === dateToDelete);
-                  toDelete.forEach((t) => onDeleteTransaction(t.id));
-                }
-              }}
-              onDeleteSingleTransaction={(txId) => {
-                onDeleteTransaction(txId);
-              }}
-              onEditSingleTransaction={(tx) => {
-                onSaveTransaction(tx);
-              }}
-              inventory={inventory}
-              suppliers={suppliers}
-              onViewDayDetail={(date) => {
-                if (date !== currentDate) onDateChange(date);
-                setViewMode('day_detail');
-              }}
-              onShowNotification={(msg) => {
-                if (!msg || msg.includes('تم جلب') || msg.includes('جلب كل معلومات')) return;
-                if (autoSpeak) {
-                  handlePlayVoice(msg);
-                }
-              }}
-              forceRefreshTrigger={forceRefreshTrigger}
-            />
+            <SafeDashboardBoundary onFallbackToChat={() => setViewMode('chat')}>
+              <DailyStructuredInputDashboard
+                currentDate={currentDate}
+                onDateChange={onDateChange}
+                availableDates={availableDates}
+                transactions={transactions}
+                onSaveDayTransactions={handleSaveStructuredDayTransactions}
+                onDeleteDayTransactions={(dateToDelete) => {
+                  if (onOverwriteDayTransactions) {
+                    onOverwriteDayTransactions(dateToDelete, []);
+                  } else {
+                    const toDelete = transactions.filter((t) => t.date === dateToDelete);
+                    toDelete.forEach((t) => onDeleteTransaction(t.id));
+                  }
+                }}
+                onDeleteSingleTransaction={(txId) => {
+                  onDeleteTransaction(txId);
+                }}
+                onEditSingleTransaction={(tx) => {
+                  onSaveTransaction(tx);
+                }}
+                inventory={inventory}
+                suppliers={suppliers}
+                onViewDayDetail={(date) => {
+                  if (date !== currentDate) onDateChange(date);
+                  setViewMode('day_detail');
+                }}
+                onShowNotification={(msg) => {
+                  if (!msg || msg.includes('تم جلب') || msg.includes('جلب كل معلومات')) return;
+                  if (autoSpeak) {
+                    handlePlayVoice(msg);
+                  }
+                }}
+                forceRefreshTrigger={forceRefreshTrigger}
+              />
+            </SafeDashboardBoundary>
           </div>
         ) : viewMode === 'system_audit' ? (
           <div className="flex-1 min-h-0 overflow-y-auto bg-slate-900 flex flex-col p-2 sm:p-4">
