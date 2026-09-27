@@ -76,10 +76,10 @@ jobs:
       - name: Upload APK directly to GitHub Release (Releases)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.7.8
-          name: "إصدار نظام الرقم الأول v2.7.8"
+          tag_name: v2.7.9
+          name: "إصدار نظام الرقم الأول v2.7.9"
           body: |
-            # 🚀 نظام الرقم الأول لإدارة نقاط البيع والمحاسبة (v2.7.8)
+            # 🚀 نظام الرقم الأول لإدارة نقاط البيع والمحاسبة (v2.7.9)
 
             التطبيقات المكتملة والمتاحة للتحميل الفوري:
             - 📱 **Al-Raqam-Al-Awwal.apk**: تطبيق الأندرويد للهواتف والشاشات اللمسية ونقاط البيع.
@@ -95,8 +95,8 @@ jobs:
           echo "## 📱 اكتمل بناء تطبيق الأندرويد بنجاح!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📥 روابط التنزيل المباشرة:" >> $GITHUB_STEP_SUMMARY
-          echo "- 📱 [تحميل تطبيق الأندرويد (Al-Raqam-Al-Awwal.apk)](https://github.com/${{ github.repository }}/releases/download/v2.7.8/Al-Raqam-Al-Awwal.apk)" >> $GITHUB_STEP_SUMMARY
-          echo "- 🌐 [صفحة جميع الإصدارات (Releases)](https://github.com/${{ github.repository }}/releases/tag/v2.7.8)" >> $GITHUB_STEP_SUMMARY
+          echo "- 📱 [تحميل تطبيق الأندرويد (Al-Raqam-Al-Awwal.apk)](https://github.com/${{ github.repository }}/releases/download/v2.7.9/Al-Raqam-Al-Awwal.apk)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🌐 [صفحة جميع الإصدارات (Releases)](https://github.com/${{ github.repository }}/releases/tag/v2.7.9)" >> $GITHUB_STEP_SUMMARY
 
   # ==========================================
   # 2. Build Windows EXE
@@ -196,10 +196,10 @@ jobs:
       - name: Upload Windows EXE & ZIP directly to GitHub Release (Releases)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.7.8
-          name: "إصدار نظام الرقم الأول v2.7.8"
+          tag_name: v2.7.9
+          name: "إصدار نظام الرقم الأول v2.7.9"
           body: |
-            # 🚀 نظام الرقم الأول لإدارة نقاط البيع والمحاسبة (v2.7.8)
+            # 🚀 نظام الرقم الأول لإدارة نقاط البيع والمحاسبة (v2.7.9)
 
             التطبيقات المكتملة والمتاحة للتحميل الفوري:
             - 📱 **Al-Raqam-Al-Awwal.apk**: تطبيق الأندرويد للهواتف والشاشات اللمسية ونقاط البيع.
@@ -221,8 +221,8 @@ jobs:
           echo "## 💻 اكتمل بناء برنامج وحزمة الويندوز بنجاح!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📥 روابط التنزيل المباشرة:" >> $GITHUB_STEP_SUMMARY
-          echo "- 💻 [تحميل برنامج الويندوز المباشر (Al-Raqam-Al-Awwal.exe)](https://github.com/${{ github.repository }}/releases/download/v2.7.8/Al-Raqam-Al-Awwal.exe)" >> $GITHUB_STEP_SUMMARY
-          echo "- 📦 [تحميل حزمة الويندوز المضغوطة 60 ميقا (Al-Raqam-Al-Awwal-Windows-60MB.zip)](https://github.com/${{ github.repository }}/releases/download/v2.7.8/Al-Raqam-Al-Awwal-Windows-60MB.zip)" >> $GITHUB_STEP_SUMMARY
-          echo "- 📦 [تحميل حزمة الويندوز المضغوطة القياسية (Al-Raqam-Al-Awwal-Windows.zip)](https://github.com/${{ github.repository }}/releases/download/v2.7.8/Al-Raqam-Al-Awwal-Windows.zip)" >> $GITHUB_STEP_SUMMARY
-          echo "- 🗜️ [تحميل حزمة 7-Zip فائقة الضغط (Al-Raqam-Al-Awwal-Windows-60MB.7z)](https://github.com/${{ github.repository }}/releases/download/v2.7.8/Al-Raqam-Al-Awwal-Windows-60MB.7z)" >> $GITHUB_STEP_SUMMARY
-          echo "- 🌐 [صفحة جميع الإصدارات (Releases)](https://github.com/${{ github.repository }}/releases/tag/v2.7.8)" >> $GITHUB_STEP_SUMMARY
+          echo "- 💻 [تحميل برنامج الويندوز المباشر (Al-Raqam-Al-Awwal.exe)](https://github.com/${{ github.repository }}/releases/download/v2.7.9/Al-Raqam-Al-Awwal.exe)" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 [تحميل حزمة الويندوز المضغوطة 60 ميقا (Al-Raqam-Al-Awwal-Windows-60MB.zip)](https://github.com/${{ github.repository }}/releases/download/v2.7.9/Al-Raqam-Al-Awwal-Windows-60MB.zip)" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 [تحميل حزمة الويندوز المضغوطة القياسية (Al-Raqam-Al-Awwal-Windows.zip)](https://github.com/${{ github.repository }}/releases/download/v2.7.9/Al-Raqam-Al-Awwal-Windows.zip)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🗜️ [تحميل حزمة 7-Zip فائقة الضغط (Al-Raqam-Al-Awwal-Windows-60MB.7z)](https://github.com/${{ github.repository }}/releases/download/v2.7.9/Al-Raqam-Al-Awwal-Windows-60MB.7z)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🌐 [صفحة جميع الإصدارات (Releases)](https://github.com/${{ github.repository }}/releases/tag/v2.7.9)" >> $GITHUB_STEP_SUMMARY

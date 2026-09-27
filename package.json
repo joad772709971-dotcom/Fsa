@@ -1,7 +1,7 @@
 {
   "name": "mosaab-shop-management",
   "private": true,
-  "version": "2.7.8",
+  "version": "2.7.9",
   "main": "electron-main.cjs",
   "type": "module",
   "scripts": {
