@@ -332,12 +332,19 @@ export function loadTransactions(): Transaction[] {
         return validItems;
       }
     }
+
+    // إذا كان النظام قد تم تشغيله وتهيئته مسبقاً، لا يتم إعادة توليد العمليات التجريبية إطلاقاً
+    const hasInitialized = localStorage.getItem('mosaab_system_initialized_flag');
+    if (hasInitialized === 'true') {
+      return [];
+    }
   } catch (e) {
     console.error('Failed to load transactions from localStorage', e);
   }
 
-  // التهيئة الأولية للمرة الأولى فقط عند تشغيل التطبيق في جهاز فارغ تماماً
+  // التهيئة الأولية للمرة الأولى فقط عند تشغيل التطبيق في جهاز فارغ تماماً لأول مرة
   try {
+    localStorage.setItem('mosaab_system_initialized_flag', 'true');
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(INITIAL_TRANSACTIONS));
   } catch (err) {}
   return INITIAL_TRANSACTIONS;
