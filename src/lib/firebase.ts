@@ -4,6 +4,7 @@ import {
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  memoryLocalCache,
   getFirestore,
   enableNetwork,
   disableNetwork,
@@ -30,18 +31,18 @@ setLogLevel('silent');
 
 let dbInstance: ReturnType<typeof getFirestore>;
 
-try {
-  // Check if we are running in an Android WebView / Capacitor mobile app
-  const isMobileApp =
-    typeof window !== 'undefined' &&
-    (Boolean((window as any).Capacitor) ||
-      /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || ''));
+const isMobileApp =
+  typeof window !== 'undefined' &&
+  (Boolean((window as any).Capacitor) ||
+    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || ''));
 
-  // Initialize with persistent offline cache and auto-detect long-polling for stable connectivity
+try {
+  // Use experimentalForceLongPolling for instant, reliable connectivity across mobile networks (Yemen Mobile, 4G, WiFi),
+  // Android WebViews, and desktop environments without WebSocket drops or timeouts.
   dbInstance = initializeFirestore(
     app,
     {
-      experimentalAutoDetectLongPolling: true,
+      experimentalForceLongPolling: true,
       localCache: persistentLocalCache(
         isMobileApp
           ? {} // Use rock-solid single-tab cache on Android/iOS WebView (avoids WebLocks / BroadcastChannel deadlocks)
@@ -52,13 +53,25 @@ try {
   );
 } catch (e) {
   try {
-    dbInstance = getFirestore(app, databaseId);
-  } catch (err2) {
-    dbInstance = getFirestore(app);
+    // If persistentLocalCache fails (e.g. IndexedDB origin restrictions in Capacitor), fallback to memory cache with forced long polling
+    dbInstance = initializeFirestore(
+      app,
+      {
+        experimentalForceLongPolling: true,
+        localCache: memoryLocalCache(),
+      },
+      databaseId
+    );
+  } catch (e2) {
+    try {
+      dbInstance = getFirestore(app, databaseId);
+    } catch (err3) {
+      dbInstance = getFirestore(app);
+    }
   }
 }
 
 export const db = dbInstance;
 export const auth = getAuth(app);
-export { app, enableNetwork, disableNetwork };
+export { app, enableNetwork, disableNetwork, databaseId, firebaseConfig };
 

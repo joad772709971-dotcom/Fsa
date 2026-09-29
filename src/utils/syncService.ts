@@ -11,6 +11,7 @@ import {
 import { db } from '../lib/firebase';
 import { Transaction, Supplier, Employee, InventoryItem, CustomerDebt, DayRecord } from '../types';
 import { PriceMemoryItem } from '../types/pricing';
+import { getApiBaseUrl } from './apkConfig';
 import {
   loadTransactions,
   loadSuppliers,
@@ -90,22 +91,70 @@ export function cleanPayloadForFirestore<T>(data: T): T {
   return JSON.parse(JSON.stringify(data));
 }
 
+const PENDING_TX_QUEUE_KEY = 'mosaab_pending_cloud_tx_queue';
+
+function getPendingTxQueue(): Map<string, Transaction> {
+  try {
+    const raw = localStorage.getItem(PENDING_TX_QUEUE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Map(arr.map((t: Transaction) => [t.id, t]));
+    }
+  } catch (e) {}
+  return new Map();
+}
+
+function queuePendingTx(tx: Transaction) {
+  try {
+    const q = getPendingTxQueue();
+    q.set(tx.id, tx);
+    localStorage.setItem(PENDING_TX_QUEUE_KEY, JSON.stringify(Array.from(q.values())));
+  } catch (e) {}
+}
+
+function removePendingTx(id: string) {
+  try {
+    const q = getPendingTxQueue();
+    if (q.has(id)) {
+      q.delete(id);
+      localStorage.setItem(PENDING_TX_QUEUE_KEY, JSON.stringify(Array.from(q.values())));
+    }
+  } catch (e) {}
+}
+
 /**
- * Upload single transaction to Firestore
+ * Upload single transaction to Firestore and sync server
  */
 export async function syncTransactionToCloud(tx: Transaction): Promise<void> {
+  const sanitized = cleanPayloadForFirestore({
+    ...tx,
+    updatedAt: tx.updatedAt || new Date().toISOString(),
+  });
+
+  // 1. Instant sync via backend server (APK, Web, and EXE sync relay)
+  try {
+    const apiBase = getApiBaseUrl();
+    fetch(`${apiBase}/api/sync/transactions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transaction: sanitized }),
+    }).catch(() => {});
+  } catch (e) {}
+
+  // 2. Cloud Firestore sync
   try {
     unmarkTxDeleted(tx.id);
     deleteDoc(doc(db, 'deleted_transactions', tx.id)).catch(() => {});
     const docRef = doc(db, 'transactions', tx.id);
-    const sanitized = cleanPayloadForFirestore({
-      ...tx,
-      updatedAt: tx.updatedAt || new Date().toISOString(),
-    });
     await setDoc(docRef, sanitized, { merge: true });
+    removePendingTx(tx.id);
     updateLastSyncTime();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cloud_data_synced', { detail: { count: 1, timestamp: Date.now() } }));
+    }
   } catch (err: any) {
-    console.warn('Offline or sync error for transaction:', tx.id, err);
+    console.warn('Firestore offline or quota exceeded, transaction preserved in local queue and server relay:', tx.id, err?.message || err);
+    queuePendingTx(tx);
   }
 }
 
@@ -195,7 +244,12 @@ export async function syncPriceMemoryToCloud(mem: PriceMemoryItem): Promise<void
 export async function deleteTransactionFromCloud(id: string): Promise<void> {
   try {
     markTxDeleted(id);
-    await deleteDoc(doc(db, 'transactions', id));
+    const apiBase = getApiBaseUrl();
+    fetch(`${apiBase}/api/sync/transactions/${id}`, {
+      method: 'DELETE',
+    }).catch(() => {});
+
+    await deleteDoc(doc(db, 'transactions', id)).catch(() => {});
     // تسجيل علامة الحذف سحابياً لمنع أي جهاز آخر من إعادة رفع أو استرجاع العملية
     await setDoc(
       doc(db, 'deleted_transactions', id),
@@ -206,6 +260,9 @@ export async function deleteTransactionFromCloud(id: string): Promise<void> {
       { merge: true }
     ).catch(() => {});
     updateLastSyncTime();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cloud_data_synced', { detail: { count: 0, timestamp: Date.now() } }));
+    }
   } catch (err) {
     console.warn('Failed to delete transaction from cloud:', id, err);
   }
@@ -215,14 +272,27 @@ export async function deleteTransactionFromCloud(id: string): Promise<void> {
  * Upload single day record to Firestore for multi-worker instant sync
  */
 export async function syncDayToCloud(day: DayRecord): Promise<void> {
+  const sanitized = cleanPayloadForFirestore({
+    ...day,
+    updatedAt: new Date().toISOString(),
+  });
+
+  try {
+    const apiBase = getApiBaseUrl();
+    fetch(`${apiBase}/api/sync/days`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ day: sanitized }),
+    }).catch(() => {});
+  } catch (e) {}
+
   try {
     const docRef = doc(db, 'days', day.id);
-    const sanitized = cleanPayloadForFirestore({
-      ...day,
-      updatedAt: new Date().toISOString(),
-    });
     await setDoc(docRef, sanitized, { merge: true });
     updateLastSyncTime();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cloud_data_synced', { detail: { timestamp: Date.now() } }));
+    }
   } catch (err: any) {
     console.warn('Offline or sync error for day record:', day.id, err);
   }
@@ -327,6 +397,13 @@ export function startRealtimeSync(
         });
 
         saveTransactions(merged);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('cloud_data_synced', {
+              detail: { count: merged.length, timestamp: Date.now() },
+            })
+          );
+        }
         onDataUpdate?.('transactions', { newTransactions: incomingNewTxs });
         updateLastSyncTime();
       }
@@ -517,6 +594,60 @@ export function startRealtimeSync(
   );
   unsubscribers.push(unsubDays);
 
+  // 8. Server Relay Heartbeat (Instant sync between APK, Web, and EXE across different networks)
+  if (typeof window !== 'undefined') {
+    const serverInterval = setInterval(async () => {
+      try {
+        const apiBase = getApiBaseUrl();
+        const res = await fetch(`${apiBase}/api/sync/transactions`, { cache: 'no-cache' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.transactions) && data.transactions.length > 0) {
+            const deletedIds = getDeletedTxIds();
+            if (Array.isArray(data.tombstones)) {
+              data.tombstones.forEach((tId: string) => {
+                deletedIds.add(tId);
+                markTxDeleted(tId);
+              });
+            }
+
+            const localTxs = loadTransactions();
+            const localMap = new Map<string, Transaction>(localTxs.map((t) => [t.id, t]));
+            let hasNewOrUpdated = false;
+
+            data.transactions.forEach((sTx: Transaction) => {
+              if (!sTx || !sTx.id || deletedIds.has(sTx.id)) return;
+              const existing = localMap.get(sTx.id);
+              if (!existing) {
+                localMap.set(sTx.id, sTx);
+                hasNewOrUpdated = true;
+              } else if (sTx.updatedAt && existing.updatedAt && sTx.updatedAt > existing.updatedAt) {
+                localMap.set(sTx.id, sTx);
+                hasNewOrUpdated = true;
+              }
+            });
+
+            if (hasNewOrUpdated) {
+              const merged = Array.from(localMap.values()).filter((t) => !deletedIds.has(t.id));
+              merged.sort((a, b) => {
+                const dateCmp = (b.date || '').localeCompare(a.date || '');
+                if (dateCmp !== 0) return dateCmp;
+                return (b.time || '').localeCompare(a.time || '');
+              });
+              saveTransactions(merged);
+              onDataUpdate?.('transactions');
+              updateLastSyncTime();
+            }
+          }
+        }
+      } catch (e) {
+        // benign transient offline
+      }
+    }, 6000);
+
+    unsubscribers.push(() => clearInterval(serverInterval));
+  }
+
   return stopRealtimeSync;
 }
 
@@ -548,6 +679,7 @@ function updateLastSyncTime() {
 
 /**
  * Trigger full initial or on-demand push & pull synchronization (المزامنة السريعة الفورية)
+ * بنية المزامنة السحابية فائقة السرعة والمطابقة الموحدة بين الأجهزة
  */
 export async function triggerFullSync(): Promise<{ success: boolean; message: string; count?: number }> {
   currentStatus.isSyncing = true;
@@ -555,11 +687,36 @@ export async function triggerFullSync(): Promise<{ success: boolean; message: st
   notifyStatus();
 
   try {
-    const batchSize = 300;
-
-    // 0. Sync tombstones from deleted_transactions
-    const deletedSnap = await getDocs(collection(db, 'deleted_transactions')).catch(() => null);
     const deletedIds = getDeletedTxIds();
+    const pendingQueue = getPendingTxQueue();
+
+    // 0. Pull from server relay first (APK / EXE / Web instant synchronization)
+    const apiBase = getApiBaseUrl();
+    let serverData: any = null;
+
+    try {
+      const serverRes = await fetch(`${apiBase}/api/sync/all`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transactions: Array.from(pendingQueue.values()),
+          deletedIds: Array.from(deletedIds),
+        }),
+      });
+      if (serverRes.ok) {
+        serverData = await serverRes.json();
+      }
+    } catch (e) {}
+
+    if (serverData?.tombstones && Array.isArray(serverData.tombstones)) {
+      serverData.tombstones.forEach((tId: string) => {
+        deletedIds.add(tId);
+        markTxDeleted(tId);
+      });
+    }
+
+    // 1. Pull tombstones from Firestore
+    const deletedSnap = await getDocs(collection(db, 'deleted_transactions')).catch(() => null);
     if (deletedSnap && !deletedSnap.empty) {
       deletedSnap.forEach((d) => {
         deletedIds.add(d.id);
@@ -567,173 +724,122 @@ export async function triggerFullSync(): Promise<{ success: boolean; message: st
       });
     }
 
-    // 1. Push all active local transactions to Firestore in batches (sanitized against undefined values)
+    // 2. Load local transactions & merge with server & Firestore
     const localTxs = loadTransactions().filter((t) => !deletedIds.has(t.id));
-    for (let i = 0; i < localTxs.length; i += batchSize) {
-      const chunk = localTxs.slice(i, i + batchSize);
-      const batch = writeBatch(db);
-      chunk.forEach((tx) => {
-        const docRef = doc(db, 'transactions', tx.id);
-        batch.set(docRef, cleanPayloadForFirestore({ ...tx, updatedAt: new Date().toISOString() }), { merge: true });
+    const localTxMap = new Map<string, Transaction>(localTxs.map((t) => [t.id, t]));
+
+    // Merge server data
+    if (serverData?.transactions && Array.isArray(serverData.transactions)) {
+      serverData.transactions.forEach((st: Transaction) => {
+        if (!st || !st.id || deletedIds.has(st.id)) return;
+        const local = localTxMap.get(st.id);
+        if (!local || (st.updatedAt && local.updatedAt && st.updatedAt >= local.updatedAt)) {
+          localTxMap.set(st.id, st);
+        }
       });
-      await batch.commit();
     }
 
-    // 2. Push Suppliers (sanitized)
-    const suppliers = loadSuppliers();
-    if (suppliers.length > 0) {
-      const batch = writeBatch(db);
-      suppliers.forEach((s) => {
-        const docRef = doc(db, 'suppliers', s.id);
-        batch.set(docRef, cleanPayloadForFirestore({ ...s, updatedAt: new Date().toISOString() }), { merge: true });
+    // Pull from Firestore
+    const remoteTxSnap = await getDocs(collection(db, 'transactions')).catch((e) => {
+      console.warn('Could not read remote transactions from Firestore:', e);
+      return null;
+    });
+
+    if (remoteTxSnap && !remoteTxSnap.empty) {
+      remoteTxSnap.forEach((d) => {
+        const data = d.data() as Transaction;
+        if (!data || !data.id || deletedIds.has(data.id)) return;
+        const local = localTxMap.get(data.id);
+        if (!local || (data.updatedAt && local.updatedAt && data.updatedAt >= local.updatedAt)) {
+          localTxMap.set(data.id, data);
+        }
       });
-      await batch.commit();
     }
 
-    // 3. Push Customers (sanitized)
-    const customers = loadCustomers();
-    if (customers.length > 0) {
-      const batch = writeBatch(db);
-      customers.forEach((c) => {
-        const docRef = doc(db, 'customers', c.id);
-        batch.set(docRef, cleanPayloadForFirestore({ ...c, updatedAt: new Date().toISOString() }), { merge: true });
-      });
-      await batch.commit();
-    }
+    const mergedTxs = Array.from(localTxMap.values()).filter((t) => !deletedIds.has(t.id));
+    mergedTxs.sort((a, b) => {
+      const dateCmp = (b.date || '').localeCompare(a.date || '');
+      if (dateCmp !== 0) return dateCmp;
+      return (b.time || '').localeCompare(a.time || '');
+    });
+    saveTransactions(mergedTxs);
 
-    // 4. Push Employees (sanitized)
-    const employees = loadEmployees();
-    if (employees.length > 0) {
-      const batch = writeBatch(db);
-      employees.forEach((e) => {
-        const docRef = doc(db, 'employees', e.id);
-        batch.set(docRef, cleanPayloadForFirestore({ ...e, updatedAt: new Date().toISOString() }), { merge: true });
-      });
-      await batch.commit();
-    }
-
-    // 5. Push Price Memory Items (sanitized)
-    const priceMem = loadPriceMemory();
-    for (let i = 0; i < priceMem.length; i += batchSize) {
-      const chunk = priceMem.slice(i, i + batchSize);
-      const batch = writeBatch(db);
-      chunk.forEach((p) => {
-        const docRef = doc(db, 'price_memory', p.id);
-        batch.set(docRef, cleanPayloadForFirestore({ ...p, updatedAt: new Date().toISOString() }), { merge: true });
-      });
-      await batch.commit();
-    }
-
-    // 6. Push Inventory Items (sanitized)
-    const localInventory = loadInventory();
-    for (let i = 0; i < localInventory.length; i += batchSize) {
-      const chunk = localInventory.slice(i, i + batchSize);
-      const batch = writeBatch(db);
-      chunk.forEach((inv) => {
-        const docRef = doc(db, 'inventory', inv.id);
-        batch.set(docRef, cleanPayloadForFirestore({ ...inv, updatedAt: new Date().toISOString() }), { merge: true });
-      });
-      await batch.commit();
-    }
-
-    // 7. Push Days Records (sanitized)
+    // 3. Sync Days
     let localDays: DayRecord[] = [];
     try {
       const savedDaysStr = localStorage.getItem('mosaab_days_data_v2');
       if (savedDaysStr) localDays = JSON.parse(savedDaysStr);
     } catch (e) {}
+    const localDayMap = new Map<string, DayRecord>(localDays.map((d) => [d.id, d]));
 
-    for (let i = 0; i < localDays.length; i += batchSize) {
-      const chunk = localDays.slice(i, i + batchSize);
-      const batch = writeBatch(db);
-      chunk.forEach((d) => {
-        const docRef = doc(db, 'days', d.id);
-        batch.set(docRef, cleanPayloadForFirestore({ ...d, updatedAt: new Date().toISOString() }), { merge: true });
-      });
-      await batch.commit();
-    }
-
-    // 8. Pull remote data and merge into local storage
-    const remoteTxSnap = await getDocs(collection(db, 'transactions'));
-    let totalSyncedTxs = localTxs.length;
-    if (!remoteTxSnap.empty) {
-      const cloudTxs: Transaction[] = [];
-      remoteTxSnap.forEach((d) => {
-        const data = d.data() as Transaction;
-        if (deletedIds.has(data.id)) return;
-        if (data.id && data.id.startsWith('tx_202608') && data.id.endsWith('_acc')) {
-          deleteDoc(doc(db, 'transactions', data.id)).catch(() => {});
-          return;
-        }
-        cloudTxs.push(data);
-      });
-      const localMap = new Map<string, Transaction>(localTxs.map((t) => [t.id, t]));
-      cloudTxs.forEach((ct) => {
-        if (!deletedIds.has(ct.id)) {
-          localMap.set(ct.id, ct);
+    if (serverData?.days && Array.isArray(serverData.days)) {
+      serverData.days.forEach((sd: DayRecord) => {
+        if (!sd || !sd.id) return;
+        const existing = localDayMap.get(sd.id);
+        if (!existing || (sd.updatedAt && existing.updatedAt && sd.updatedAt >= existing.updatedAt)) {
+          localDayMap.set(sd.id, sd);
         }
       });
-      const merged = Array.from(localMap.values()).filter((t) => !deletedIds.has(t.id));
-      saveTransactions(merged);
-      totalSyncedTxs = merged.length;
     }
 
-    // 9. Pull remote inventory and merge
-    const remoteInvSnap = await getDocs(collection(db, 'inventory'));
-    if (!remoteInvSnap.empty) {
-      const cloudInv: InventoryItem[] = [];
-      remoteInvSnap.forEach((d) => {
-        cloudInv.push(d.data() as InventoryItem);
-      });
-      const localInvMap = new Map<string, InventoryItem>(localInventory.map((i) => [i.id, i]));
-      cloudInv.forEach((ci) => localInvMap.set(ci.id, ci));
-      const mergedInv = Array.from(localInvMap.values());
-      saveInventory(mergedInv);
-    }
-
-    // 10. Pull remote days and merge
-    const remoteDaysSnap = await getDocs(collection(db, 'days'));
-    if (!remoteDaysSnap.empty) {
-      const cloudDays: DayRecord[] = [];
+    const remoteDaysSnap = await getDocs(collection(db, 'days')).catch(() => null);
+    if (remoteDaysSnap && !remoteDaysSnap.empty) {
       remoteDaysSnap.forEach((d) => {
-        cloudDays.push(d.data() as DayRecord);
-      });
-      const localDayMap = new Map<string, DayRecord>(localDays.map((d) => [d.id, d]));
-      cloudDays.forEach((cd) => {
+        const cd = d.data() as DayRecord;
+        if (!cd || !cd.id) return;
         const existing = localDayMap.get(cd.id);
-        if (!existing) {
+        if (!existing || (cd.updatedAt && existing.updatedAt && cd.updatedAt >= existing.updatedAt)) {
           localDayMap.set(cd.id, cd);
-        } else {
-          localDayMap.set(cd.id, {
-            ...existing,
-            ...cd,
-            accessories: (cd.accessories && cd.accessories.length > 0) ? cd.accessories : (existing.accessories || []),
-            phones: (cd.phones && cd.phones.length > 0) ? cd.phones : (existing.phones || []),
-            maintenance: (cd.maintenance && cd.maintenance.length > 0) ? cd.maintenance : (existing.maintenance || []),
-            recharge: (cd.recharge && cd.recharge.totalWithProfit > 0) ? cd.recharge : (existing.recharge || cd.recharge),
-            supplierTransfers: (cd.supplierTransfers && cd.supplierTransfers.length > 0) ? cd.supplierTransfers : (existing.supplierTransfers || []),
-          });
         }
       });
-      const mergedDays = Array.from(localDayMap.values());
-      try {
-        localStorage.setItem('mosaab_days_data_v2', JSON.stringify(mergedDays));
-      } catch (e) {}
+    }
+
+    const mergedDays = Array.from(localDayMap.values());
+    try {
+      localStorage.setItem('mosaab_days_data_v2', JSON.stringify(mergedDays));
+    } catch (e) {}
+
+    // 4. Sync Inventory
+    const remoteInvSnap = await getDocs(collection(db, 'inventory')).catch(() => null);
+    const localInventory = loadInventory();
+    const localInvMap = new Map<string, InventoryItem>(localInventory.map((i) => [i.id, i]));
+    if (remoteInvSnap && !remoteInvSnap.empty) {
+      remoteInvSnap.forEach((d) => {
+        const ci = d.data() as InventoryItem;
+        if (ci && ci.id) localInvMap.set(ci.id, ci);
+      });
+      saveInventory(Array.from(localInvMap.values()));
+    }
+
+    // 5. Push ONLY pending user-created transactions to Firestore (Protect free quota!)
+    const pendingTxs = Array.from(pendingQueue.values()).filter((t) => !deletedIds.has(t.id));
+    if (pendingTxs.length > 0) {
+      const batch = writeBatch(db);
+      pendingTxs.forEach((tx) => {
+        const docRef = doc(db, 'transactions', tx.id);
+        batch.set(docRef, cleanPayloadForFirestore({ ...tx, updatedAt: tx.updatedAt || new Date().toISOString() }), { merge: true });
+      });
+      await batch.commit().then(() => {
+        pendingTxs.forEach((tx) => removePendingTx(tx.id));
+      }).catch((err) => {
+        console.warn('Batch push to Firestore skipped or quota limit reached:', err?.message || err);
+      });
     }
 
     updateLastSyncTime();
 
-    // Notify the UI to instantly update state from localStorage
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('cloud_data_synced', {
-        detail: { count: totalSyncedTxs, timestamp: Date.now() }
-      }));
+      window.dispatchEvent(
+        new CustomEvent('cloud_data_synced', {
+          detail: { count: mergedTxs.length, timestamp: Date.now() },
+        })
+      );
     }
 
     return {
       success: true,
-      message: `تمت المزامنة السريعة بنجاح (${totalSyncedTxs} عملية مسجلة ومتطابقة)`,
-      count: totalSyncedTxs,
+      message: `تمت المزامنة السحابية الفورية بنجاح (${mergedTxs.length} عملية موحدة عبر APK و Web و EXE)`,
+      count: mergedTxs.length,
     };
   } catch (err: any) {
     console.error('Fast Sync Error:', err);

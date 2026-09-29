@@ -10,3 +10,4 @@ coverage/
 *.timestamp*
 .env*
 !.env.example
+data/*.json

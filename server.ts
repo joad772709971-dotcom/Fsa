@@ -1,6 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { Readable } from 'stream';
 import { GoogleGenAI, Type } from '@google/genai';
@@ -33,6 +34,167 @@ async function startServer() {
   // Health check endpoint
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', time: new Date().toISOString() });
+  });
+
+  // ==========================================
+  // --- REAL-TIME MULTI-PLATFORM SYNC ENGINE ---
+  // (Instant synchronization between APK, Web, and EXE)
+  // ==========================================
+  const dataDir = path.join(process.cwd(), 'data');
+  if (!fs.existsSync(dataDir)) {
+    try { fs.mkdirSync(dataDir, { recursive: true }); } catch (e) {}
+  }
+  const syncTxFile = path.join(dataDir, 'synced_transactions.json');
+  const syncDaysFile = path.join(dataDir, 'synced_days.json');
+  const syncTombstonesFile = path.join(dataDir, 'synced_tombstones.json');
+
+  let serverTransactions: Map<string, any> = new Map();
+  let serverDays: Map<string, any> = new Map();
+  let serverTombstones: Set<string> = new Set();
+
+  try {
+    if (fs.existsSync(syncTombstonesFile)) {
+      const raw = JSON.parse(fs.readFileSync(syncTombstonesFile, 'utf-8'));
+      if (Array.isArray(raw)) serverTombstones = new Set(raw);
+    }
+    if (fs.existsSync(syncTxFile)) {
+      const raw = JSON.parse(fs.readFileSync(syncTxFile, 'utf-8'));
+      if (Array.isArray(raw)) {
+        raw.forEach((t: any) => {
+          if (t && t.id && !serverTombstones.has(t.id)) serverTransactions.set(t.id, t);
+        });
+      }
+    }
+    if (fs.existsSync(syncDaysFile)) {
+      const raw = JSON.parse(fs.readFileSync(syncDaysFile, 'utf-8'));
+      if (Array.isArray(raw)) {
+        raw.forEach((d: any) => {
+          if (d && d.id) serverDays.set(d.id, d);
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load initial sync files on server:', e);
+  }
+
+  function persistSyncData() {
+    try {
+      fs.writeFileSync(syncTxFile, JSON.stringify(Array.from(serverTransactions.values())), 'utf-8');
+      fs.writeFileSync(syncDaysFile, JSON.stringify(Array.from(serverDays.values())), 'utf-8');
+      fs.writeFileSync(syncTombstonesFile, JSON.stringify(Array.from(serverTombstones)), 'utf-8');
+    } catch (e) {
+      console.warn('Failed to persist sync data:', e);
+    }
+  }
+
+  // 1. Get all synced transactions
+  app.get('/api/sync/transactions', (_req, res) => {
+    const list = Array.from(serverTransactions.values()).filter((t) => !serverTombstones.has(t.id));
+    res.json({ success: true, count: list.length, transactions: list, tombstones: Array.from(serverTombstones) });
+  });
+
+  // 2. Save single or batch transactions
+  app.post('/api/sync/transactions', (req, res) => {
+    const incoming = Array.isArray(req.body.transactions)
+      ? req.body.transactions
+      : req.body.transaction
+      ? [req.body.transaction]
+      : [];
+
+    let updatedCount = 0;
+    incoming.forEach((tx: any) => {
+      if (!tx || !tx.id || serverTombstones.has(tx.id)) return;
+      const existing = serverTransactions.get(tx.id);
+      if (!existing || !existing.updatedAt || !tx.updatedAt || tx.updatedAt >= existing.updatedAt) {
+        serverTransactions.set(tx.id, tx);
+        updatedCount++;
+      }
+    });
+
+    if (updatedCount > 0) persistSyncData();
+    res.json({ success: true, updatedCount, totalCount: serverTransactions.size });
+  });
+
+  // 3. Delete transaction (record tombstone)
+  app.delete('/api/sync/transactions/:id', (req, res) => {
+    const id = req.params.id;
+    if (id) {
+      serverTombstones.add(id);
+      serverTransactions.delete(id);
+      persistSyncData();
+    }
+    res.json({ success: true, id, tombstonesCount: serverTombstones.size });
+  });
+
+  // 4. Get all synced days
+  app.get('/api/sync/days', (_req, res) => {
+    res.json({ success: true, count: serverDays.size, days: Array.from(serverDays.values()) });
+  });
+
+  // 5. Save single or batch days
+  app.post('/api/sync/days', (req, res) => {
+    const incoming = Array.isArray(req.body.days)
+      ? req.body.days
+      : req.body.day
+      ? [req.body.day]
+      : [];
+
+    let updatedCount = 0;
+    incoming.forEach((d: any) => {
+      if (!d || !d.id) return;
+      const existing = serverDays.get(d.id);
+      if (!existing || !existing.updatedAt || !d.updatedAt || d.updatedAt >= existing.updatedAt) {
+        serverDays.set(d.id, d);
+        updatedCount++;
+      }
+    });
+
+    if (updatedCount > 0) persistSyncData();
+    res.json({ success: true, updatedCount, totalCount: serverDays.size });
+  });
+
+  // 6. Fast Combined Push & Pull (One-Shot Sync for APK / EXE / Web)
+  app.post('/api/sync/all', (req, res) => {
+    const clientTxs = Array.isArray(req.body.transactions) ? req.body.transactions : [];
+    const clientDays = Array.isArray(req.body.days) ? req.body.days : [];
+    const clientDeleted = Array.isArray(req.body.deletedIds) ? req.body.deletedIds : [];
+
+    // Apply client deletions
+    clientDeleted.forEach((id: string) => {
+      serverTombstones.add(id);
+      serverTransactions.delete(id);
+    });
+
+    // Merge transactions
+    clientTxs.forEach((tx: any) => {
+      if (!tx || !tx.id || serverTombstones.has(tx.id)) return;
+      const existing = serverTransactions.get(tx.id);
+      if (!existing || !existing.updatedAt || !tx.updatedAt || tx.updatedAt >= existing.updatedAt) {
+        serverTransactions.set(tx.id, tx);
+      }
+    });
+
+    // Merge days
+    clientDays.forEach((d: any) => {
+      if (!d || !d.id) return;
+      const existing = serverDays.get(d.id);
+      if (!existing || !existing.updatedAt || !d.updatedAt || d.updatedAt >= existing.updatedAt) {
+        serverDays.set(d.id, d);
+      }
+    });
+
+    persistSyncData();
+
+    const mergedTxs = Array.from(serverTransactions.values()).filter((t) => !serverTombstones.has(t.id));
+    const mergedDays = Array.from(serverDays.values());
+
+    res.json({
+      success: true,
+      serverTime: new Date().toISOString(),
+      transactions: mergedTxs,
+      days: mergedDays,
+      tombstones: Array.from(serverTombstones),
+    });
   });
 
   // Arabic Audio Speech Synthesis (TTS) endpoint

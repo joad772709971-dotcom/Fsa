@@ -6,7 +6,7 @@
 const STORAGE_KEY_CUSTOM_SERVER = 'mosaab_custom_server_url';
 
 // الرابط الرسمي للتطبيق السحابي في Cloud Run
-export const DEFAULT_PRODUCTION_CLOUD_URL = 'https://ais-pre-etyokv2gpewohvcbrisgxt-387456550425.europe-west3.run.app';
+export const DEFAULT_PRODUCTION_CLOUD_URL = 'https://ais-pre-vwj2rcpdfzbnl7jk3oiup3-840467283558.europe-west2.run.app';
 
 /**
  * هل يعمل التطبيق حالياً داخل حزمة تطبيق أندرويد (APK / Capacitor WebView)؟

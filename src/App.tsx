@@ -119,6 +119,8 @@ import {
   syncInventoryToCloud,
   syncDayToCloud,
 } from './utils/syncService';
+import { syncTransactionIntoDays, removeTransactionFromDays } from './utils/ledgerUnification';
+import { CURRENT_STORE_ID, OWNER_USER_ID } from './services/forensicAuditorService';
 import { initKeyboardHelper } from './utils/keyboardHelper';
 import {
   calculateDailySummary,
@@ -558,7 +560,15 @@ export default function App() {
     return getCurrentMonthString();
   };
 
-  const [currentDate, setCurrentDate] = useState<string>(() => getTodayStr());
+  const [currentDate, setCurrentDate] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('mosaab_active_selected_date');
+      if (saved && /^\d{4}-\d{2}-\d{2}$/.test(saved)) {
+        return saved;
+      }
+    } catch (e) {}
+    return getTodayStr();
+  });
   const [currentMonth, setCurrentMonth] = useState<string>(() => getThisMonthStr());
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [isOpenMobile, setIsOpenMobile] = useState<boolean>(false);
@@ -703,20 +713,12 @@ export default function App() {
       }, 500);
     }
 
-    // Periodic fast reconciliation every 30 seconds
-    const intervalTimer = setInterval(() => {
-      if (navigator.onLine && !document.hidden) {
-        triggerFullSync().catch(() => {});
-      }
-    }, 30000);
-
     return () => {
       window.removeEventListener('inventory_updated', handleInventoryUpdated);
       window.removeEventListener('cloud_data_synced', handleRefreshAllLocalState);
       window.removeEventListener('focus', handleAppResume);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (syncTimer) clearTimeout(syncTimer);
-      clearInterval(intervalTimer);
       stopSync();
     };
   }, []);
@@ -789,8 +791,12 @@ export default function App() {
 
   // Handlers for transactions
   const handleSaveTransaction = (rawTx: Transaction) => {
+    const nowIso = new Date().toISOString();
     const tx: Transaction = {
       ...rawTx,
+      storeId: rawTx.storeId || CURRENT_STORE_ID,
+      ownerId: rawTx.ownerId || OWNER_USER_ID,
+      updatedAt: rawTx.updatedAt || nowIso,
       supplierName: rawTx.supplierName ? normalizeSupplierName(rawTx.supplierName) : undefined,
     };
     syncTransactionToCloud(tx);
@@ -804,12 +810,25 @@ export default function App() {
         return [tx, ...prev];
       }
     });
+
+    // 🔒 توحيد الدفاتر: عكس المعاملة مباشرة على سجل اليوميات المعتمد (days)
+    setDays((prevDays) => {
+      const updatedDays = syncTransactionIntoDays(tx, prevDays);
+      const targetDay = updatedDays.find((d) => d.date === tx.date);
+      if (targetDay) syncDayToCloud(targetDay);
+      return updatedDays;
+    });
+
     autoRegisterSaleInInventory(tx);
   };
 
   const handleSaveBatchTransactions = (newTxList: Transaction[]) => {
+    const nowIso = new Date().toISOString();
     const sanitizedList = newTxList.map((t) => ({
       ...t,
+      storeId: t.storeId || CURRENT_STORE_ID,
+      ownerId: t.ownerId || OWNER_USER_ID,
+      updatedAt: t.updatedAt || nowIso,
       supplierName: t.supplierName ? normalizeSupplierName(t.supplierName) : undefined,
     }));
     sanitizedList.forEach((t) => {
@@ -817,6 +836,21 @@ export default function App() {
       autoRegisterSaleInInventory(t);
     });
     setTransactions((prev) => [...sanitizedList, ...prev]);
+
+    // 🔒 توحيد الدفاتر: عكس القائمة كاملة على سجل اليوميات المعتمد (days)
+    setDays((prevDays) => {
+      let currentDays = prevDays;
+      const affectedDates = new Set<string>();
+      sanitizedList.forEach((t) => {
+        currentDays = syncTransactionIntoDays(t, currentDays);
+        if (t.date) affectedDates.add(t.date);
+      });
+      affectedDates.forEach((d) => {
+        const targetDay = currentDays.find((day) => day.date === d);
+        if (targetDay) syncDayToCloud(targetDay);
+      });
+      return currentDays;
+    });
   };
 
   const handleSplitCompoundTransaction = (originalTxId: string, newTxList: Transaction[]) => {
@@ -826,13 +860,21 @@ export default function App() {
       const filtered = prev.filter((t) => t.id !== originalTxId);
       return [...newTxList, ...filtered];
     });
+
+    setDays((prevDays) => {
+      let currentDays = removeTransactionFromDays(originalTxId, prevDays);
+      newTxList.forEach((t) => {
+        currentDays = syncTransactionIntoDays(t, currentDays);
+      });
+      return currentDays;
+    });
   };
 
   const handleDeleteTransaction = (id: string) => {
-    if (window.confirm('هل أنت متأكد من حذف هذا السند؟')) {
-      deleteTransactionFromCloud(id);
-      setTransactions((prev) => prev.filter((t) => t.id !== id));
-    }
+    deleteTransactionFromCloud(id);
+    setTransactions((prev) => prev.filter((t) => t.id !== id));
+    // 🔒 توحيد الدفاتر: استبعاد المعاملة المحذوفة من دفتر وسجل اليوميات المقابل
+    setDays((prevDays) => removeTransactionFromDays(id, prevDays));
   };
 
   const handleEditTransaction = (tx: Transaction) => {
@@ -848,10 +890,14 @@ export default function App() {
   };
 
   const handleAddParsedTransactions = (parsed: Transaction[]) => {
-    setTransactions((prev) => [...parsed, ...prev]);
+    const nowIso = new Date().toISOString();
+    const withTimestamps = parsed.map((t) => ({ ...t, updatedAt: t.updatedAt || nowIso }));
+    withTimestamps.forEach((t) => syncTransactionToCloud(t));
+    setTransactions((prev) => [...withTimestamps, ...prev]);
   };
 
   const handleOverwriteDayTransactions = (date: string, newTxList: Transaction[]) => {
+    const nowIso = new Date().toISOString();
     // 1. حذف جميع القيود السابقة لهذا التاريخ محلياً وسحابياً لمنع التكرار (Overwrite)
     const existingForDate = transactions.filter((t) => t.date === date);
     existingForDate.forEach((t) => {
@@ -862,6 +908,7 @@ export default function App() {
     const sanitizedList = newTxList.map((t) => ({
       ...t,
       date,
+      updatedAt: t.updatedAt || nowIso,
       supplierName: t.supplierName ? normalizeSupplierName(t.supplierName) : undefined,
     }));
 
@@ -965,6 +1012,9 @@ export default function App() {
 
   const handleDateChange = (date: string) => {
     setCurrentDate(date);
+    try {
+      localStorage.setItem('mosaab_active_selected_date', date);
+    } catch (e) {}
     if (date.length >= 7) {
       setCurrentMonth(date.substring(0, 7));
     }
@@ -1100,10 +1150,14 @@ export default function App() {
                 });
               }}
               inventoryItems={inventory}
-              onAddInventoryItem={(item) => setInventory((prev) => [item, ...prev])}
-              onUpdateInventoryItem={(item) =>
-                setInventory((prev) => prev.map((i) => (i.id === item.id ? item : i)))
-              }
+              onAddInventoryItem={(item) => {
+                setInventory((prev) => [item, ...prev]);
+                syncInventoryToCloud(item);
+              }}
+              onUpdateInventoryItem={(item) => {
+                setInventory((prev) => prev.map((i) => (i.id === item.id ? item : i)));
+                syncInventoryToCloud(item);
+              }}
               supplierProfiles={supplierProfiles}
               onAddSupplierProfile={(p) => setSupplierProfiles((prev) => [p, ...prev])}
               onAddSupplierTransaction={(tx) =>

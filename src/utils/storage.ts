@@ -352,11 +352,14 @@ export function loadTransactions(): Transaction[] {
 
 export function saveTransactions(transactions: Transaction[]): void {
   try {
-    // وسم وتأكيد هوية المتجر (CURRENT_STORE_ID) والمالك (OWNER_USER_ID) لجميع العمليات
-    const stampedTransactions = transactions.map((t) => ({
+    const deletedIds = getDeletedTxIds();
+    // تصفية أي معاملات محذوفة والتأكد من وسوم المتجر والوقت
+    const active = transactions.filter((t) => t && t.id && !deletedIds.has(t.id));
+    const stampedTransactions = active.map((t) => ({
       ...t,
       storeId: t.storeId || CURRENT_STORE_ID,
       ownerId: t.ownerId || OWNER_USER_ID,
+      updatedAt: t.updatedAt || new Date().toISOString(),
     }));
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(stampedTransactions));
   } catch (e) {

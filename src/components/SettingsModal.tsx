@@ -174,13 +174,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onChange={(e) => setCurrency(e.target.value)}
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white font-medium"
                 >
+                  <option value="ر.ي">ريال يمني (ر.ي - YER)</option>
                   <option value="ر.س">ريال سعودي (ر.س - SAR)</option>
+                  <option value="$">دولار أمريكي ($ - USD)</option>
                   <option value="د.إ">درهم إماراتي (د.إ - AED)</option>
                   <option value="ج.م">جنيه مصري (ج.م - EGP)</option>
                   <option value="د.ك">دينار كويتي (د.ك - KWD)</option>
                   <option value="ر.ع">ريال عماني (ر.ع - OMR)</option>
                   <option value="ر.ق">ريال قطري (ر.ق - QAR)</option>
-                  <option value="$">دولار أمريكي ($ - USD)</option>
                 </select>
               </div>
 
