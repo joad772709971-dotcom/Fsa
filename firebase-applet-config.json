@@ -1,12 +1,12 @@
 {
-  "projectId": "gen-lang-client-0923413400",
-  "appId": "1:376109484806:web:e782640cdda6f7b8c92c87",
-  "apiKey": "AIzaSyCRugFK3_Mncp7e-yWeeTRL-3oGjyZ1HDY",
-  "authDomain": "gen-lang-client-0923413400.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
-  "storageBucket": "gen-lang-client-0923413400.firebasestorage.app",
-  "messagingSenderId": "376109484806",
+  "projectId": "yodeling-design-t07pf",
+  "appId": "1:65282300515:web:044c073f0e111e3c24f656",
+  "apiKey": "AIzaSyBSULFayvrSrP3nsANEkYx7t2_WyO-JEgk",
+  "authDomain": "yodeling-design-t07pf.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-remix2-c3853d82-4cb2-41d2-9ecd-9a8c89e75f72",
+  "storageBucket": "yodeling-design-t07pf.firebasestorage.app",
+  "messagingSenderId": "65282300515",
   "measurementId": "",
-  "oAuthClientId": "",
+  "oAuthClientId": "65282300515-8gusv8t2odiiemdl7j5rkcjpfb4fu1dv.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

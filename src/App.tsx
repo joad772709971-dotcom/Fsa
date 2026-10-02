@@ -667,6 +667,13 @@ export default function App() {
         const updated = loadTransactions();
         setTransactions(updated);
         if (details?.newTransactions && details.newTransactions.length > 0) {
+          setDays((prevDays) => {
+            let currentDays = prevDays;
+            details.newTransactions?.forEach((t) => {
+              currentDays = syncTransactionIntoDays(t, currentDays);
+            });
+            return currentDays;
+          });
           const first = details.newTransactions[0];
           const count = details.newTransactions.length;
           const msg =
