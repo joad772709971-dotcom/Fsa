@@ -345,68 +345,81 @@ export function startRealtimeSync(
   const unsubTx = onSnapshot(
     collection(db, 'transactions'),
     (snapshot) => {
-      if (!snapshot.empty) {
-        const cloudTxs: Transaction[] = [];
-        const deletedIds = getDeletedTxIds();
+      const cloudTxs: Transaction[] = [];
+      const deletedIds = getDeletedTxIds();
 
-        snapshot.forEach((docSnap) => {
-          const t = docSnap.data() as Transaction;
-          if (!deletedIds.has(t.id)) {
-            cloudTxs.push(t);
-          }
-        });
-
-        // Merge with local transactions
-        const localTxs = loadTransactions();
-        const localMap = new Map<string, Transaction>(localTxs.map((t) => [t.id, t]));
-        const incomingNewTxs: Transaction[] = [];
-
-        // Identify new transactions added remotely and handle removals
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === 'removed') {
-            markTxDeleted(change.doc.id);
-            localMap.delete(change.doc.id);
-          } else if (change.type === 'added') {
-            const data = change.doc.data() as Transaction;
-            if (!deletedIds.has(data.id) && !localMap.has(data.id)) {
-              incomingNewTxs.push(data);
-            }
-          }
-        });
-
-        cloudTxs.forEach((cTx) => {
-          if (deletedIds.has(cTx.id)) return;
-          // Remove any legacy compound August transactions from cloud if found
-          if (cTx.id && cTx.id.startsWith('tx_202608') && cTx.id.endsWith('_acc')) {
-            deleteDoc(doc(db, 'transactions', cTx.id)).catch(() => {});
-            return;
-          }
-          const localTx = localMap.get(cTx.id);
-          // حماية التعديلات المحلية (خاصة أثناء انقطاع الإنترنت أو التعديل الفوري)
-          if (localTx && localTx.updatedAt && cTx.updatedAt && localTx.updatedAt > cTx.updatedAt) {
-            return;
-          }
-          localMap.set(cTx.id, cTx);
-        });
-
-        const merged = Array.from(localMap.values()).filter((t) => !deletedIds.has(t.id));
-        merged.sort((a, b) => {
-          const dateCmp = (b.date || '').localeCompare(a.date || '');
-          if (dateCmp !== 0) return dateCmp;
-          return (b.time || '').localeCompare(a.time || '');
-        });
-
-        saveTransactions(merged);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(
-            new CustomEvent('cloud_data_synced', {
-              detail: { count: merged.length, timestamp: Date.now() },
-            })
-          );
+      snapshot.forEach((docSnap) => {
+        const t = docSnap.data() as Transaction;
+        if (!deletedIds.has(t.id)) {
+          cloudTxs.push(t);
         }
-        onDataUpdate?.('transactions', { newTransactions: incomingNewTxs });
-        updateLastSyncTime();
+      });
+
+      // Merge with local transactions
+      const localTxs = loadTransactions();
+      const localMap = new Map<string, Transaction>(localTxs.map((t) => [t.id, t]));
+      const incomingNewTxs: Transaction[] = [];
+
+      // Identify new transactions added remotely and handle removals
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'removed') {
+          markTxDeleted(change.doc.id);
+          localMap.delete(change.doc.id);
+        } else if (change.type === 'added') {
+          const data = change.doc.data() as Transaction;
+          if (!deletedIds.has(data.id) && !localMap.has(data.id)) {
+            incomingNewTxs.push(data);
+          }
+        }
+      });
+
+      cloudTxs.forEach((cTx) => {
+        if (deletedIds.has(cTx.id)) return;
+        // Remove any legacy compound August transactions from cloud if found
+        if (cTx.id && cTx.id.startsWith('tx_202608') && cTx.id.endsWith('_acc')) {
+          deleteDoc(doc(db, 'transactions', cTx.id)).catch(() => {});
+          return;
+        }
+        const localTx = localMap.get(cTx.id);
+        // حماية التعديلات المحلية (خاصة أثناء انقطاع الإنترنت أو التعديل الفوري)
+        if (localTx && localTx.updatedAt && cTx.updatedAt && localTx.updatedAt > cTx.updatedAt) {
+          return;
+        }
+        localMap.set(cTx.id, cTx);
+      });
+
+      const merged = Array.from(localMap.values()).filter((t) => !deletedIds.has(t.id));
+      merged.sort((a, b) => {
+        const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+        const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+        if (timeA && timeB && Math.abs(timeA - timeB) > 500) {
+          return timeB - timeA;
+        }
+        const extractIdTime = (id?: string) => {
+          if (!id) return 0;
+          const match = id.match(/\d{10,13}/);
+          return match ? parseInt(match[0], 10) : 0;
+        };
+        const idTimeA = extractIdTime(a.id);
+        const idTimeB = extractIdTime(b.id);
+        if (idTimeA && idTimeB && Math.abs(idTimeA - idTimeB) > 500) {
+          return idTimeB - idTimeA;
+        }
+        const dateCmp = (b.date || '').localeCompare(a.date || '');
+        if (dateCmp !== 0) return dateCmp;
+        return (b.time || '').localeCompare(a.time || '');
+      });
+
+      saveTransactions(merged);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('cloud_data_synced', {
+            detail: { count: merged.length, timestamp: Date.now() },
+          })
+        );
       }
+      onDataUpdate?.('transactions', { newTransactions: incomingNewTxs });
+      updateLastSyncTime();
     },
     (_err) => {
       // Benign offline or transient reconnection state

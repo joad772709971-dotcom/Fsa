@@ -46,9 +46,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigateTab,
   onSelectDate,
 }) => {
-  const recentTx = [...transactions]
-    .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')))
-    .slice(0, 8);
+  const recentTx = React.useMemo(() => {
+    return [...transactions]
+      .sort((a, b) => {
+        // 1. Primary: creation/modification ISO timestamp (updatedAt / createdAt)
+        const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+        const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+        if (timeA && timeB && Math.abs(timeA - timeB) > 500) {
+          return timeB - timeA;
+        }
+
+        // 2. Secondary: extraction from timestamp in ID (e.g. tx_1789...)
+        const extractIdTime = (id?: string) => {
+          if (!id) return 0;
+          const match = id.match(/\d{10,13}/);
+          return match ? parseInt(match[0], 10) : 0;
+        };
+        const idTimeA = extractIdTime(a.id);
+        const idTimeB = extractIdTime(b.id);
+        if (idTimeA && idTimeB && Math.abs(idTimeA - idTimeB) > 500) {
+          return idTimeB - idTimeA;
+        }
+
+        // 3. Fallback: date + time
+        const dateCmp = (b.date || '').localeCompare(a.date || '');
+        if (dateCmp !== 0) return dateCmp;
+        return (b.time || '').localeCompare(a.time || '');
+      })
+      .slice(0, 10);
+  }, [transactions]);
 
   const quickActionButtons: {
     id: string;
@@ -424,7 +450,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col justify-between">
           <div>
             <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-              <h3 className="font-bold text-sm text-slate-900">آخر الحركات والقيود المسجلة</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-sm text-slate-900">آخر الحركات والقيود المسجلة</h3>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  تحديث فوري
+                </span>
+              </div>
               <button
                 onClick={() => onNavigateTab('daily_ledger')}
                 className="text-xs font-bold text-emerald-700 hover:text-emerald-800"
@@ -435,9 +467,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             {recentTx.length === 0 ? (
               <div className="p-8 text-center space-y-2">
-                <div className="text-xs font-bold text-slate-500">لا توجد حركات مسجلة حالياً</div>
-                <p className="text-[11px] text-slate-400">
-                  النظام جاهز ونظيف تماماً. يمكنك البدء بتسجيل المبيعات، الصيانة، فواتير القطع، أو عمليات الرصيد من الأزرار أعلاه.
+                <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center mx-auto text-emerald-600 mb-2">
+                  <UserCheck className="w-6 h-6" />
+                </div>
+                <div className="text-sm font-bold text-slate-700">النظام مصفى ونظيف تماماً</div>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  تم مسح وتصفير كافة البيانات السابقة بنجاح. حساب المالك وحساب مصعب الصوفي وبيته جاهزة للعمل. العمليات الجديدة المسجلة ستظهر هنا فوراً.
                 </p>
               </div>
             ) : (
@@ -445,45 +480,92 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <table className="w-full min-w-[500px] sm:min-w-full text-xs text-right">
                   <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
                     <tr>
-                      <th className="p-3">التاريخ</th>
+                      <th className="p-3">التاريخ والوقت</th>
                       <th className="p-3">النوع</th>
-                      <th className="p-3">البيان</th>
+                      <th className="p-3">البيان والتفاصيل</th>
                       <th className="p-3">المبلغ</th>
                       <th className="p-3">الفائدة</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {recentTx.map((tx) => (
-                      <tr key={tx.id} className="hover:bg-slate-50">
-                        <td className="p-3 font-mono text-slate-500">{tx.date}</td>
-                        <td className="p-3">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800">
-                            {tx.type === 'sale'
-                              ? 'مبيعات'
-                              : tx.type === 'maintenance'
-                              ? 'صيانة 50%'
-                              : tx.type === 'balance_hadi'
-                              ? 'رصيد الهادي'
-                              : tx.type === 'balance_qimma'
-                              ? 'رصيد الرقم'
-                              : tx.type === 'expense_home_mosaab'
-                              ? 'بيت مصعب'
-                              : tx.type === 'withdrawal_mosaab'
-                              ? 'سحب مصعب'
-                              : tx.type === 'expense_engineer'
-                              ? 'صرفة مهندس'
-                              : tx.type === 'expense_shop'
-                              ? 'خرج محل'
-                              : tx.type}
-                          </span>
-                        </td>
-                        <td className="p-3 font-semibold text-slate-900">{tx.description}</td>
-                        <td className="p-3 font-mono font-bold text-slate-900">{formatCurrency(tx.price)}</td>
-                        <td className="p-3 font-mono font-bold text-emerald-600">
-                          {tx.profit > 0 ? `+${formatCurrency(tx.profit)}` : '-'}
-                        </td>
-                      </tr>
-                    ))}
+                    {recentTx.map((tx) => {
+                      const amountVal = tx.price ?? tx.amount ?? 0;
+                      return (
+                        <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-3">
+                            <div className="font-mono font-medium text-slate-700">{tx.date}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">{tx.time || 'الآن'}</div>
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                              tx.type === 'expense_home_mosaab'
+                                ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                : tx.type === 'withdrawal_mosaab'
+                                ? 'bg-purple-100 text-purple-900 border-purple-300'
+                                : tx.type === 'partner_funding' || tx.type === 'partners_funding'
+                                ? 'bg-indigo-100 text-indigo-900 border-indigo-300'
+                                : tx.type === 'partner_withdrawal'
+                                ? 'bg-blue-100 text-blue-900 border-blue-300'
+                                : tx.type === 'partner_deposit'
+                                ? 'bg-teal-100 text-teal-900 border-teal-300'
+                                : tx.type === 'sale'
+                                ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                : tx.type === 'maintenance'
+                                ? 'bg-sky-100 text-sky-900 border-sky-300'
+                                : tx.type === 'balance_hadi'
+                                ? 'bg-teal-100 text-teal-900 border-teal-300'
+                                : tx.type === 'balance_qimma'
+                                ? 'bg-cyan-100 text-cyan-900 border-cyan-300'
+                                : tx.type === 'purchase'
+                                ? 'bg-orange-100 text-orange-900 border-orange-300'
+                                : tx.type === 'expense_shop'
+                                ? 'bg-rose-100 text-rose-900 border-rose-300'
+                                : tx.type === 'expense_engineer'
+                                ? 'bg-yellow-100 text-yellow-900 border-yellow-300'
+                                : 'bg-slate-100 text-slate-800 border-slate-200'
+                            }`}>
+                              {tx.type === 'expense_home_mosaab'
+                                ? 'صرفة بيت مصعب'
+                                : tx.type === 'withdrawal_mosaab'
+                                ? 'سحب مصعب'
+                                : tx.type === 'partner_funding' || tx.type === 'partners_funding'
+                                ? 'تمويل الشركاء'
+                                : tx.type === 'partner_withdrawal'
+                                ? 'مسحوبات الشركاء'
+                                : tx.type === 'partner_deposit'
+                                ? 'إيداع الشركاء'
+                                : tx.type === 'sale'
+                                ? 'مبيعات'
+                                : tx.type === 'maintenance'
+                                ? 'صيانة 50%'
+                                : tx.type === 'balance_hadi'
+                                ? 'رصيد الهادي'
+                                : tx.type === 'balance_qimma'
+                                ? 'رصيد الرقم'
+                                : tx.type === 'purchase'
+                                ? 'مشتريات'
+                                : tx.type === 'expense_shop'
+                                ? 'خرج محل'
+                                : tx.type === 'expense_engineer'
+                                ? 'صرفة مهندس'
+                                : tx.type}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <div className="font-semibold text-slate-900">{tx.description}</div>
+                            {tx.party || tx.customerName || tx.notes ? (
+                              <div className="text-[10px] text-slate-400 truncate max-w-[220px]">
+                                {tx.party || tx.customerName ? `${tx.party || tx.customerName} | ` : ''}{tx.notes}
+                              </div>
+                            ) : null}
+                          </td>
+                          <td className="p-3 font-mono font-bold text-slate-900">{formatCurrency(amountVal)}</td>
+                          <td className="p-3 font-mono font-bold text-emerald-600">
+                            {tx.profit && tx.profit > 0 ? `+${formatCurrency(tx.profit)}` : '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -806,13 +806,15 @@ export default function App() {
     syncTransactionToCloud(tx);
     setTransactions((prev) => {
       const existsIndex = prev.findIndex((item) => item.id === tx.id);
+      let next: Transaction[];
       if (existsIndex >= 0) {
-        const updated = [...prev];
-        updated[existsIndex] = tx;
-        return updated;
+        next = [...prev];
+        next[existsIndex] = tx;
       } else {
-        return [tx, ...prev];
+        next = [tx, ...prev];
       }
+      saveTransactions(next);
+      return next;
     });
 
     // 🔒 توحيد الدفاتر: عكس المعاملة مباشرة على سجل اليوميات المعتمد (days)
@@ -839,7 +841,11 @@ export default function App() {
       syncTransactionToCloud(t);
       autoRegisterSaleInInventory(t);
     });
-    setTransactions((prev) => [...sanitizedList, ...prev]);
+    setTransactions((prev) => {
+      const next = [...sanitizedList, ...prev];
+      saveTransactions(next);
+      return next;
+    });
 
     // 🔒 توحيد الدفاتر: عكس القائمة كاملة على سجل اليوميات المعتمد (days)
     setDays((prevDays) => {
@@ -862,7 +868,9 @@ export default function App() {
     newTxList.forEach((t) => syncTransactionToCloud(t));
     setTransactions((prev) => {
       const filtered = prev.filter((t) => t.id !== originalTxId);
-      return [...newTxList, ...filtered];
+      const next = [...newTxList, ...filtered];
+      saveTransactions(next);
+      return next;
     });
 
     setDays((prevDays) => {
@@ -876,7 +884,11 @@ export default function App() {
 
   const handleDeleteTransaction = (id: string) => {
     deleteTransactionFromCloud(id);
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
+    setTransactions((prev) => {
+      const next = prev.filter((t) => t.id !== id);
+      saveTransactions(next);
+      return next;
+    });
     // 🔒 توحيد الدفاتر: استبعاد المعاملة المحذوفة من دفتر وسجل اليوميات المقابل
     setDays((prevDays) => removeTransactionFromDays(id, prevDays));
   };

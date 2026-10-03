@@ -1,7 +1,4 @@
 import { Transaction, Supplier, Employee, InventoryItem, CustomerDebt } from '../types';
-import { AUGUST_TRANSACTIONS } from '../data/augustData';
-import { SEPTEMBER_TRANSACTIONS } from '../data/septemberData';
-import { generateHadiOfficialTransactions } from '../data/hadiOfficialRecords';
 import { CURRENT_STORE_ID, OWNER_USER_ID, ForensicAuditorService } from '../services/forensicAuditorService';
 
 const STORAGE_KEYS = {
@@ -39,7 +36,7 @@ export function isSalesMaintBalanceTx(t: Transaction | { type?: string; category
 // Automatic cleanup of legacy demo caches & purge of all previous entries
 (() => {
   try {
-    const PURGE_KEY = 'mosaab_system_clean_reset_v6';
+    const PURGE_KEY = 'mosaab_system_clean_reset_v7';
     if (typeof localStorage !== 'undefined' && localStorage.getItem(PURGE_KEY) !== 'true') {
       const legacyKeys = [
         'mosaab_shop_transactions_v1',
@@ -72,6 +69,8 @@ export function isSalesMaintBalanceTx(t: Transaction | { type?: string; category
       legacyKeys.forEach((k) => localStorage.removeItem(k));
       localStorage.setItem('mosaab_shop_transactions_v2', JSON.stringify([]));
       localStorage.setItem('mosaab_days_data_v2', JSON.stringify([]));
+      localStorage.setItem('mosaab_shop_inventory_v2', JSON.stringify([]));
+      localStorage.setItem('mosaab_shop_customers_v2', JSON.stringify([]));
       localStorage.setItem(PURGE_KEY, 'true');
     }
   } catch (e) {
@@ -263,6 +262,9 @@ export function loadTransactions(): Transaction[] {
             t.id === 'tx-106' ||
             t.id === 'tx-107' ||
             t.id === 'tx-108' ||
+            t.id.startsWith('hadi-purchase-') ||
+            t.id.startsWith('exp_transfer_') ||
+            t.id === 'tx_20260901_modem_opera' ||
             t.referenceNo === 'RENT-Q3' ||
             t.referenceNo === 'UTIL-0926' ||
             t.description?.includes('إيجار مقر') ||
@@ -272,22 +274,41 @@ export function loadTransactions(): Transaction[] {
             return false;
           }
 
-          // تنقية العمليات الملغية لمياس / الهادي
-          const isMayasOrHadi =
-            (t.supplierName && t.supplierName.includes('مياس')) ||
-            (t.description && (t.description.includes('مياس') || t.description.includes('الهادي'))) ||
-            t.type === 'balance_hadi' ||
-            t.type === 'transfer_mohammed_mayas';
+          // تصفية العمليات التجريبية السابقة للمبيعات والصيانة والمشتريات والرصيد قبل التصفير
+          const isLegacyPrePurge =
+            t.date <= '2026-09-22' &&
+            (t.type === 'sale' ||
+              t.type === 'purchase' ||
+              t.type === 'maintenance' ||
+              t.type === 'balance_hadi' ||
+              t.type === 'balance_qimma' ||
+              t.type === 'transfer_to_supplier' ||
+              t.type === 'transfer_mohammed_mayas');
 
-          if (isMayasOrHadi && t.date >= '2026-08-01' && t.date <= '2026-09-22' && !t.id.startsWith('hadi-')) {
+          if (isLegacyPrePurge) {
             return false;
           }
 
           return true;
         });
 
-        // فرز العمليات تنازلياً بحسب التاريخ والوقت
+        // فرز العمليات تنازلياً بحسب أحدث وقت للإدخال والتعديل، ثم التاريخ والوقت
         cleanedParsed.sort((a, b) => {
+          const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+          const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+          if (timeA && timeB && Math.abs(timeA - timeB) > 500) {
+            return timeB - timeA;
+          }
+          const extractIdTime = (id?: string) => {
+            if (!id) return 0;
+            const match = id.match(/\d{10,13}/);
+            return match ? parseInt(match[0], 10) : 0;
+          };
+          const idTimeA = extractIdTime(a.id);
+          const idTimeB = extractIdTime(b.id);
+          if (idTimeA && idTimeB && Math.abs(idTimeA - idTimeB) > 500) {
+            return idTimeB - idTimeA;
+          }
           const dateCmp = (b.date || '').localeCompare(a.date || '');
           if (dateCmp !== 0) return dateCmp;
           return (b.time || '').localeCompare(a.time || '');

@@ -50,6 +50,10 @@ export type TransactionType =
   | 'withdrawal_home' // صرفة البيت والأهل (توافق)
   | 'withdrawal_personal' // مسحوبات شخصية (توافق)
   | 'expense_work' // مصاريف العمل الخارجية (توافق)
+  | 'partner_funding' // تمويل الشركاء
+  | 'partners_funding' // تمويل الشركاء
+  | 'partner_withdrawal' // مسحوبات الشركاء
+  | 'partner_deposit' // إيداع الشركاء
   | 'damaged'; // تالف
 
 export type Category =
