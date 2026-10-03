@@ -84,7 +84,7 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
     id: 'sup_1',
     name: 'مؤسسة العبصري لقطع الغيار',
     type: 'spare_parts',
-    phone: '',
+    phone: '772999679',
     location: 'صنعاء',
     initialBalance: 0,
     totalPurchases: 0,
@@ -96,7 +96,7 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
     id: 'sup_2',
     name: 'عمر القاسمي لقطع الصيانة',
     type: 'spare_parts',
-    phone: '',
+    phone: '772730163',
     location: 'صنعاء',
     initialBalance: 0,
     totalPurchases: 0,
@@ -108,7 +108,7 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
     id: 'sup_3',
     name: 'خليل الأغبري للإكسسوارات وقطع الغيار',
     type: 'spare_parts',
-    phone: '',
+    phone: '777075001',
     location: 'صنعاء',
     initialBalance: 0,
     totalPurchases: 0,
@@ -120,7 +120,7 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
     id: 'sup_4',
     name: 'محمد مياس (تطبيق الهادي)',
     type: 'balance_network',
-    phone: '',
+    phone: '777444555',
     location: 'صنعاء',
     initialBalance: 0,
     totalPurchases: 0,
@@ -132,13 +132,49 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
     id: 'sup_5',
     name: 'فايز أبو علي (شبكة القمة)',
     type: 'balance_network',
-    phone: '',
+    phone: '771388404',
     location: 'صنعاء',
     initialBalance: 0,
     totalPurchases: 0,
     totalPaid: 0,
     remainingBalance: 0,
-    notes: 'تغذية رصيد وباقات فوري وبطاقات شحن - شبكة القمة (فايز أبو علي)',
+    notes: 'تغذية رصيد وباقات فوري وبطاقات شحن - شبكة القمة (فايز سرحان / أبو علي)',
+  },
+  {
+    id: 'sup_musannaf',
+    name: 'المصنف (جمال المصنف)',
+    type: 'spare_parts',
+    phone: '772851523',
+    location: 'صنعاء / ذمار',
+    initialBalance: 0,
+    totalPurchases: 0,
+    totalPaid: 0,
+    remainingBalance: 0,
+    notes: 'إكسسوارات ومودمات تجارة وبضاعة',
+  },
+  {
+    id: 'sup_mohammed_qasimi',
+    name: 'محمد القاسمي',
+    type: 'spare_parts',
+    phone: '772505788',
+    location: 'صنعاء',
+    initialBalance: 0,
+    totalPurchases: 0,
+    totalPaid: 0,
+    remainingBalance: 0,
+    notes: 'قطع غيار جوال وشاشات',
+  },
+  {
+    id: 'sup_wassabi',
+    name: 'الوصابي (حسام الوصابي)',
+    type: 'general',
+    phone: '774727171',
+    location: 'صنعاء',
+    initialBalance: 0,
+    totalPurchases: 0,
+    totalPaid: 0,
+    remainingBalance: 0,
+    notes: 'حزم برامج وبرمجة وخدمات تقنية',
   },
 ];
 
@@ -151,7 +187,7 @@ export function normalizeSupplierName(raw: string): string {
   if (trimmed.includes('مياس') || trimmed.includes('الهادي')) {
     return 'محمد مياس (تطبيق الهادي)';
   }
-  if (trimmed.includes('فايز') || trimmed.includes('القمة') || trimmed.includes('الرقم')) {
+  if (trimmed.includes('فايز') || trimmed.includes('القمة') || trimmed.includes('سرحان') || trimmed.includes('الرقم')) {
     return 'فايز أبو علي (شبكة القمة)';
   }
   if (trimmed.includes('العبصري')) {
@@ -160,11 +196,17 @@ export function normalizeSupplierName(raw: string): string {
   if (trimmed.includes('الأغبري') || trimmed.includes('الاغبري')) {
     return 'خليل الأغبري للإكسسوارات وقطع الغيار';
   }
-  if (trimmed.includes('القاسمي')) {
+  if (trimmed.includes('محمد القاسمي')) {
+    return 'محمد القاسمي';
+  }
+  if (trimmed.includes('عمر القاسمي') || trimmed.includes('القاسمي')) {
     return 'عمر القاسمي لقطع الصيانة';
   }
   if (trimmed.includes('المصنف')) {
-    return 'تاجر المصنف';
+    return 'المصنف (جمال المصنف)';
+  }
+  if (trimmed.includes('الوصابي')) {
+    return 'الوصابي (حسام الوصابي)';
   }
   if (trimmed.includes('صنعاء')) {
     return 'تاجر صنعاء جوالات';
@@ -277,6 +319,8 @@ export function loadTransactions(): Transaction[] {
           // تصفية العمليات التجريبية السابقة للمبيعات والصيانة والمشتريات والرصيد قبل التصفير
           const isLegacyPrePurge =
             t.date <= '2026-09-22' &&
+            !t.referenceNo &&
+            !t.id?.startsWith('tx_jawali_') &&
             (t.type === 'sale' ||
               t.type === 'purchase' ||
               t.type === 'maintenance' ||

@@ -138,7 +138,7 @@ export function syncTransactionIntoDays(tx: Transaction, daysList: DayRecord[]):
     const item: MusabItem = {
       id: tx.id,
       description: tx.description,
-      amount: tx.price,
+      amount: tx.price || tx.amount || 0,
       type: 'بيت مصعب',
       notes: tx.notes,
     };
@@ -154,7 +154,7 @@ export function syncTransactionIntoDays(tx: Transaction, daysList: DayRecord[]):
     const item: MusabItem = {
       id: tx.id,
       description: tx.description,
-      amount: tx.price,
+      amount: tx.price || tx.amount || 0,
       type: 'مصعب شخصياً',
       notes: tx.notes,
     };
@@ -170,7 +170,7 @@ export function syncTransactionIntoDays(tx: Transaction, daysList: DayRecord[]):
     const item: ExpenseItem = {
       id: tx.id,
       description: tx.description,
-      amount: tx.price,
+      amount: tx.price || tx.amount || 0,
       category: tx.type === 'expense_modem' ? 'مودم واشتراكات' : 'صرفة المحل',
       notes: tx.notes,
     };
@@ -180,13 +180,13 @@ export function syncTransactionIntoDays(tx: Transaction, daysList: DayRecord[]):
   }
 
   // 8. حوالات وتوريد الموردين
-  else if (tx.supplierName || tx.type === 'purchase') {
+  else if (tx.supplierName || tx.type === 'purchase' || tx.type === 'transfer_to_supplier') {
     const sups = [...(updatedDay.supplierTransfers || [])];
     const idx = sups.findIndex((s) => s.id === tx.id);
     const item: SupplierTransferItem = {
       id: tx.id,
       supplierName: tx.supplierName || 'مورد بضاعة',
-      amountSent: tx.price,
+      amountSent: tx.price || tx.amount || 0,
       purchasesReceivedValue: tx.cost || 0,
       notes: tx.notes,
     };
