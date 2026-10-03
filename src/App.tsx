@@ -194,9 +194,6 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
-    // Enforce official verified Hadi accounting update only on pristine initialization
-    list = applyOfficialHadiToDayRecords(list);
-
     const today = getTodayDateString();
     if (!list.some((d) => d.date === today)) {
       return [getOrCreateDayForDate(today, list), ...list];

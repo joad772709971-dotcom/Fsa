@@ -36,28 +36,44 @@ export function isSalesMaintBalanceTx(t: Transaction | { type?: string; category
   return isSale || isMaint || isBalance;
 }
 
-// Automatic cleanup of legacy demo caches & purge of sales, maintenance, and balance records
+// Automatic cleanup of legacy demo caches & purge of all previous entries
 (() => {
   try {
-    const legacyKeys = [
-      'mosaab_shop_transactions_v1',
-      'mosaab_shop_suppliers_v1',
-      'mosaab_shop_employees_v1',
-      'mosaab_shop_inventory_v1',
-      'mosaab_shop_customers_v1',
-      'mosaab_transactions',
-      'mosaab_suppliers',
-      'mosaab_pos_products',
-      'mosaab_barcode_catalog',
-      'mosaab_shifts_v1',
-      'mosaab_maintenance_tickets',
-      'mosaab_maintenance_tickets_v1',
-      'mosaab_maintenance_tickets_v2',
-      'mosaab_maintenance_devices_v2',
-      'mosaab_cash_shifts',
-      'mosaab_cash_shifts_v2',
-    ];
-    legacyKeys.forEach((k) => localStorage.removeItem(k));
+    const PURGE_KEY = 'mosaab_system_clean_reset_v6';
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(PURGE_KEY) !== 'true') {
+      const legacyKeys = [
+        'mosaab_shop_transactions_v1',
+        'mosaab_shop_suppliers_v1',
+        'mosaab_shop_employees_v1',
+        'mosaab_shop_inventory_v1',
+        'mosaab_shop_customers_v1',
+        'mosaab_transactions',
+        'mosaab_suppliers',
+        'mosaab_pos_products',
+        'mosaab_barcode_catalog',
+        'mosaab_shifts_v1',
+        'mosaab_maintenance_tickets',
+        'mosaab_maintenance_tickets_v1',
+        'mosaab_maintenance_tickets_v2',
+        'mosaab_maintenance_devices_v2',
+        'mosaab_cash_shifts',
+        'mosaab_cash_shifts_v2',
+        'mosaab_shop_transactions_v2',
+        'mosaab_days_data_v2',
+        'mosaab_shop_inventory_v2',
+        'mosaab_shop_customers_v2',
+        'mosaab_pending_cloud_tx_queue',
+        'mosaab_deleted_tx_ids',
+        'mosaab_price_memory_v1',
+        'mosaab_shop_suppliers_v2',
+        'mosaab_shop_employees_v2',
+        'mosaab_system_initialized_flag',
+      ];
+      legacyKeys.forEach((k) => localStorage.removeItem(k));
+      localStorage.setItem('mosaab_shop_transactions_v2', JSON.stringify([]));
+      localStorage.setItem('mosaab_days_data_v2', JSON.stringify([]));
+      localStorage.setItem(PURGE_KEY, 'true');
+    }
   } catch (e) {
     // Ignore in SSR / restricted iframe
   }
@@ -160,50 +176,24 @@ export function normalizeSupplierName(raw: string): string {
 export const INITIAL_EMPLOYEES: Employee[] = [
   {
     id: 'emp_owner',
-    name: 'مصعب الصوفي (المالك)',
+    name: 'عبد الغني المحفلي (المالك)',
     role: 'owner',
+    phone: '',
+    dailyAllowance: 0,
+    salaryOrShare: 'المالك والمشرف العام (تصفية رأس المال والأرباح)',
+    totalWithdrawals: 0,
+    totalAllowances: 0,
+    totalEarned: 0,
+    currentBalance: 0,
+    status: 'active',
+  },
+  {
+    id: 'emp_partner_mosaab',
+    name: 'مصعب الصوفي (الشريك / الإدارة)',
+    role: 'manager',
     phone: '777000111',
     dailyAllowance: 0,
-    salaryOrShare: 'ثلثين (2/3) من صافي أرباح المحل + نصف فايدة الصيانة المخصصة للمحل',
-    totalWithdrawals: 0,
-    totalAllowances: 0,
-    totalEarned: 0,
-    currentBalance: 0,
-    status: 'active',
-  },
-  {
-    id: 'emp_manager',
-    name: 'المدير المستلم للمحل',
-    role: 'manager',
-    phone: '',
-    dailyAllowance: 2000,
-    salaryOrShare: 'ثلث (1/3) من صافي أرباح المحل',
-    totalWithdrawals: 0,
-    totalAllowances: 0,
-    totalEarned: 0,
-    currentBalance: 0,
-    status: 'active',
-  },
-  {
-    id: 'emp_engineer',
-    name: 'مهندس الصيانة',
-    role: 'engineer',
-    phone: '',
-    dailyAllowance: 2500,
-    salaryOrShare: '50% (نصف صافي فايدة الصيانة) وصرفته على المحل وسحبه يخصم من حسابه',
-    totalWithdrawals: 0,
-    totalAllowances: 0,
-    totalEarned: 0,
-    currentBalance: 0,
-    status: 'active',
-  },
-  {
-    id: 'emp_worker',
-    name: 'العامل / الكاشير',
-    role: 'worker',
-    phone: '',
-    dailyAllowance: 1500,
-    salaryOrShare: 'صرفة على المحل + راتب محدد',
+    salaryOrShare: 'إدارة المحل والمبيعات وتصفية الشركاء',
     totalWithdrawals: 0,
     totalAllowances: 0,
     totalEarned: 0,
@@ -214,32 +204,8 @@ export const INITIAL_EMPLOYEES: Employee[] = [
 
 export const INITIAL_INVENTORY: InventoryItem[] = [];
 
-const HADI_OFFICIAL_TXS = generateHadiOfficialTransactions();
-
-// Clean out legacy Mayas / Hadi transactions from raw static arrays for the updated period
-const CLEAN_AUGUST_TRANSACTIONS = AUGUST_TRANSACTIONS.filter((t) => {
-  const isMayas =
-    (t.supplierName && t.supplierName.includes('مياس')) ||
-    (t.description && (t.description.includes('مياس') || t.description.includes('الهادي'))) ||
-    t.type === 'balance_hadi' ||
-    t.type === 'transfer_mohammed_mayas';
-  return !isMayas;
-});
-
-const CLEAN_SEPTEMBER_TRANSACTIONS = SEPTEMBER_TRANSACTIONS.filter((t) => {
-  const isMayas =
-    (t.supplierName && t.supplierName.includes('مياس')) ||
-    (t.description && (t.description.includes('مياس') || t.description.includes('الهادي'))) ||
-    t.type === 'balance_hadi' ||
-    t.type === 'transfer_mohammed_mayas';
-  return !isMayas;
-});
-
-export const INITIAL_TRANSACTIONS: Transaction[] = [
-  ...HADI_OFFICIAL_TXS,
-  ...CLEAN_SEPTEMBER_TRANSACTIONS,
-  ...CLEAN_AUGUST_TRANSACTIONS,
-];
+// قاعدة بيانات المعاملات مصفية ومصفرة بالكامل لبدء العمل النظيف
+export const INITIAL_TRANSACTIONS: Transaction[] = [];
 
 export const INITIAL_CUSTOMERS: CustomerDebt[] = [];
 
